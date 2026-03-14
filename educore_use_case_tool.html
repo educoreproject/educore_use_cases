@@ -43,6 +43,7 @@
                     </select>
                     <button onclick="handlePublishClick()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-[10px] font-black uppercase">Publish / Update</button>
                     <div id="loading" style="display:none; color: yellow; font-size: 10px; margin-left: 10px;">Loading...</div>
+                    <div id="hierarchyWarning" style="display:none; color: #fbbf24; font-size: 10px; margin-left: 10px; font-weight: bold;">⚠️ Hierarchy Unavailable (Token Required)</div>
                 </div>
             </div>
         </header>
@@ -121,102 +122,96 @@
 
         async function fetchIssues() {
             const token = document.getElementById('ghToken').value;
-            if (!token) return;
-
             const [owner, name] = REPO.split('/');
-            document.getElementById('loading').style.display = 'block';
+            const loadingEl = document.getElementById('loading');
+            const warningEl = document.getElementById('hierarchyWarning');
+            const selector = document.getElementById('issueSelector');
+
+            if (loadingEl) loadingEl.style.display = 'block';
+            if (warningEl) warningEl.style.display = 'none';
 
             try {
-                // Try GraphQL first
-                const query = `
-                query {
-                  repository(owner: "${owner}", name: "${name}") {
-                    issues(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) {
-                      nodes {
-                        title
-                        url
-                        parent { url }
-                      }
-                    }
-                  }
-                }`;
-                const headers = { 'Content-Type': 'application/json', 'Authorization': `token ${token}` };
-                const res = await fetch('https://api.github.com/graphql', {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify({ query })
-                });
-                const responseData = await res.json();
-                let issues;
-                if (responseData.data) {
-                    issues = responseData.data.repository.issues.nodes;
-                } else if (responseData.errors && responseData.errors.some(e => e.type === 'RATE_LIMITED')) {
-                    // Fallback to REST API
-                    console.log("Rate limited, falling back to REST API");
-                    const restRes = await fetch(`https://api.github.com/repos/${owner}/${name}/issues`, {
-                        headers: { 'Authorization': `token ${token}` }
-                    });
-                    if (!restRes.ok) {
-                        console.log("REST API also failed");
-                        return;
-                    }
-                    const restIssues = await restRes.json();
-                    // Process into hierarchy format
-                    issues = restIssues.map(issue => {
-                        const parentMatch = issue.body.match(/Parent:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/issues\/\d+)/);
-                        return {
-                            title: issue.title,
-                            url: issue.html_url,
-                            parent: parentMatch ? { url: parentMatch[1] } : null
-                        };
-                    });
-                } else {
-                    console.log("Unable to fetch issues");
-                    return;
-                }
-                
-                const selector = document.getElementById('issueSelector');
-                selector.innerHTML = '<option value="new">-- Create New Use Case --</option>';
+                let issues = [];
 
-                // Build a Map of Parent -> Children
+                // 1. Check for Token before attempting GraphQL
+                if (!token) {
+                    console.warn("No PAT provided. Falling back to REST (No native hierarchy).");
+                    if (warningEl) warningEl.style.display = 'inline';
+                    await performRestFallback();
+                } else {
+                    // 2. Attempt GraphQL (Native Hierarchy)
+                    const query = `query {
+                        repository(owner: "${owner}", name: "${name}") {
+                            issues(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) {
+                                nodes { title, url, parent { url } }
+                            }
+                        }
+                    }`;
+
+                    const res = await fetch('https://api.github.com/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `token ${token}` },
+                        body: JSON.stringify({ query })
+                    });
+                    const responseData = await res.json();
+
+                    if (res.ok && responseData.data) {
+                        issues = responseData.data.repository.issues.nodes;
+                    } else {
+                        if (warningEl) warningEl.style.display = 'inline';
+                        await performRestFallback();
+                    }
+                }
+
+                async function performRestFallback() {
+                    const restHeaders = token ? { 'Authorization': `token ${token}` } : {};
+                    const restRes = await fetch(`https://api.github.com/repos/${owner}/${name}/issues?state=open&per_page=100`, {
+                        headers: restHeaders
+                    });
+                    if (restRes.ok) {
+                        const restData = await restRes.json();
+                        issues = restData.map(i => ({
+                            title: i.title,
+                            url: i.html_url,
+                            parent: (i.body || "").match(/Parent:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/issues\/\d+)/i) 
+                                    ? { url: RegExp.$1 } : null
+                        }));
+                    }
+                }
+
+                // 3. Render the Dropdown
+                selector.innerHTML = '<option value="new">-- Create New Use Case --</option>';
                 const issueMap = new Map();
                 const topLevel = [];
+                const allUrls = new Set(issues.map(i => i.url));
 
                 issues.forEach(issue => {
-                    if (!issue.parent) {
+                    const parentUrl = issue.parent?.url;
+                    if (!parentUrl || !allUrls.has(parentUrl)) {
                         topLevel.push(issue);
                     } else {
-                        if (!issueMap.has(issue.parent.url)) issueMap.set(issue.parent.url, []);
-                        issueMap.get(issue.parent.url).push(issue);
+                        if (!issueMap.has(parentUrl)) issueMap.set(parentUrl, []);
+                        issueMap.get(parentUrl).push(issue);
                     }
                 });
 
-                // Recursive function to add options with hyphens
                 const addHierarchy = (issue, depth = 0) => {
                     const opt = document.createElement('option');
                     opt.value = issue.url;
                     const prefix = "-".repeat(depth) + (depth > 0 ? " " : "");
                     opt.textContent = prefix + issue.title.replace('Use Case: ', '').trim();
                     selector.appendChild(opt);
-
-                    const children = issueMap.get(issue.url) || [];
-                    children.forEach(child => addHierarchy(child, depth + 1));
+                    (issueMap.get(issue.url) || []).forEach(child => addHierarchy(child, depth + 1));
                 };
 
-                topLevel.forEach(parent => addHierarchy(parent, 0));
+                topLevel.forEach(p => addHierarchy(p, 0));
+                if (currentIssueUrl) selector.value = currentIssueUrl;
 
-                // Session Sync
-                if (currentIssueUrl && currentIssueUrl !== "new") {
-                    selector.value = currentIssueUrl;
-                    if (selector.value === currentIssueUrl) {
-                        document.getElementById('saveStatus').innerText = "Linked to GitHub";
-                    } else {
-                        currentIssueUrl = "new";
-                    }
-                }
-            } catch(e) { console.error("Fetch Failed", e); }
-            finally {
-                document.getElementById('loading').style.display = 'none';
+            } catch(e) { 
+                console.error("Fetch Failed", e); 
+                if (warningEl) warningEl.style.display = 'inline';
+            } finally {
+                if (loadingEl) loadingEl.style.display = 'none';
             }
         }
 
