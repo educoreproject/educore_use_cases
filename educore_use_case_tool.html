@@ -20,6 +20,10 @@
         .widget-table td { border: 1px solid #94a3b8; padding: 0.25rem; background-color: #ffffff; }
         .ghost-input { border: none !important; background: transparent !important; width: 100% !important; font-weight: 700 !important; padding: 0.25rem !important; }
         .control-btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 0.25rem; cursor: pointer; border: none; background: none; }
+        #preview-content table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+        #preview-content th, #preview-content td { border: 1px solid #000; padding: 0.5rem; text-align: left; }
+        #preview-content table:not(.swimlane-table) tr:nth-child(even) { background-color: #f9f9f9; }
+        .swimlane-table td:nth-child(even) { background-color: #f9f9f9; }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
@@ -60,13 +64,23 @@
                     <table class="widget-table"><thead><tr><th width="50">#</th><th width="25%">Actor</th><th>Action</th><th width="120">Move</th></tr></thead><tbody id="stepsTable"></tbody></table>
                     <button onclick="addStep()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Step</button>
                 </div>
-                <div class="section-container"><label class="section-label">7. Key Concepts</label><textarea id="uc_concepts" rows="4"></textarea></div>
+                <div class="section-container"><label class="section-label">6. Interaction Swimlane</label><p>The swimlane will be generated in Preview Mode.</p></div>
+                <div class="section-container"><label class="section-label">7. Key Concepts</label>
+                    <table class="widget-table"><tbody id="conceptsTable"></tbody></table>
+                    <button onclick="addConcept()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Concept</button>
+                </div>
                 <div class="section-container"><label class="section-label">8. Data Elements</label>
                     <table class="widget-table"><thead><tr><th>Name</th><th>Definition</th><th>URL</th><th width="40"></th></tr></thead><tbody id="dataTable"></tbody></table>
                     <button onclick="addDataElement()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Data</button>
                 </div>
-                <div class="section-container"><label class="section-label">9. Dependencies</label><textarea id="uc_deps" rows="2"></textarea></div>
-                <div class="section-container"><label class="section-label">10. Outcomes</label><textarea id="uc_outcomes" rows="2"></textarea></div>
+                <div class="section-container"><label class="section-label">9. Dependencies</label>
+                    <table class="widget-table"><tbody id="depsTable"></tbody></table>
+                    <button onclick="addDep()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Dependency</button>
+                </div>
+                <div class="section-container"><label class="section-label">10. Outcomes</label>
+                    <table class="widget-table"><tbody id="outcomesTable"></tbody></table>
+                    <button onclick="addOutcome()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Outcome</button>
+                </div>
                 <div class="section-container"><label class="section-label">11. References</label>
                     <table class="widget-table"><thead><tr><th>Title</th><th>URL</th><th width="40"></th></tr></thead><tbody id="refsTable"></tbody></table>
                     <button onclick="addReference()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Ref</button>
@@ -81,7 +95,7 @@
 
     <script>
         const REPO = "INFERable-app/educate_use_cases";
-        let state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: "", dataElements: [], deps: "", outcomes: "", references: [] };
+        let state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [] };
         let lastSyncedState = ""; 
         let currentIssueUrl = "new";
 
@@ -210,6 +224,7 @@
                 lastSyncedState = JSON.stringify(state);
                 renderAll();
                 saveToLocal();
+                switchTab('edit');
                 document.getElementById('saveStatus').innerText = "Synced";
             } catch (e) { alert("Fetch failed"); }
         }
@@ -242,13 +257,13 @@
         }
 
         function resetForm() {
-            state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: "", dataElements: [], deps: "", outcomes: "", references: [] };
+            state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [] };
             lastSyncedState = JSON.stringify(state);
             renderAll();
         }
 
         function updateStateFromDOM() {
-            ['title','intro','objectives','scenario','concepts','deps','outcomes'].forEach(f => {
+            ['title','intro','objectives','scenario'].forEach(f => {
                 const el = document.getElementById(`uc_${f}`);
                 if(el) state[f] = el.value;
             });
@@ -264,7 +279,13 @@
             const s = localStorage.getItem('educore_v4_draft'); 
             const u = localStorage.getItem('educore_v4_url');
             const sy = localStorage.getItem('educore_v4_sync');
-            if(s) state = JSON.parse(s);
+            if(s) {
+                state = JSON.parse(s);
+                // Convert old string fields to arrays
+                if (typeof state.concepts === 'string') state.concepts = state.concepts ? [state.concepts] : [];
+                if (typeof state.deps === 'string') state.deps = state.deps ? [state.deps] : [];
+                if (typeof state.outcomes === 'string') state.outcomes = state.outcomes ? [state.outcomes] : [];
+            }
             if(u) currentIssueUrl = u;
             if(sy) lastSyncedState = sy;
             renderAll(); 
@@ -272,11 +293,14 @@
 
         function renderAll() {
             const sync = (arr, i, f) => `oninput="state.${arr}[${i}].${f}=this.value; saveToLocal();"`;
-            document.getElementById('actorsTable').innerHTML = state.actors.map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" oninput="state.actors[${i}].name=this.value; renderAll(); saveToLocal();"></td><td><input type="text" value="${it.desc}" class="ghost-input" ${sync('actors',i,'desc')}></td><td><button onclick="state.actors.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            document.getElementById('actorsTable').innerHTML = state.actors.map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" onblur="state.actors[${i}].name=this.value; renderAll(); saveToLocal();"></td><td><input type="text" value="${it.desc}" class="ghost-input" ${sync('actors',i,'desc')}></td><td><button onclick="state.actors.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('stepsTable').innerHTML = state.steps.map((it, i) => `<tr><td style="text-align:center; font-weight:900; color:#94a3b8; font-size:10px;">${i+1}</td><td><select onchange="state.steps[${i}].actorIdx=this.value; saveToLocal();" class="ghost-input">${state.actors.map((a,ai)=>`<option value="${ai}" ${it.actorIdx==ai?'selected':''}>${a.name||'Actor'}</option>`).join('')}</select></td><td><input type="text" value="${it.action}" class="ghost-input" ${sync('steps',i,'action')}></td><td style="display:flex; gap:4px; justify-content:center; padding: 4px;"><button onclick="moveStep(${i}, -1)" class="control-btn" style="color:#3b82f6;">↑</button><button onclick="moveStep(${i}, 1)" class="control-btn" style="color:#3b82f6;">↓</button><button onclick="state.steps.splice(${i},1);renderAll();saveToLocal();" class="control-btn" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('dataTable').innerHTML = (state.dataElements || []).map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" ${sync('dataElements',i,'name')}></td><td><input type="text" value="${it.def}" class="ghost-input" ${sync('dataElements',i,'def')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('dataElements',i,'url')}></td><td><button onclick="state.dataElements.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('refsTable').innerHTML = (state.references || []).map((it, i) => `<tr><td><input type="text" value="${it.title}" class="ghost-input" ${sync('references',i,'title')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('references',i,'url')}></td><td><button onclick="state.references.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
-            ['title','intro','objectives','scenario','concepts','deps','outcomes'].forEach(f => { const el = document.getElementById(`uc_${f}`); if(el) el.value = state[f] || ""; });
+            document.getElementById('conceptsTable').innerHTML = state.concepts.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.concepts[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.concepts.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            document.getElementById('depsTable').innerHTML = state.deps.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.deps[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.deps.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            document.getElementById('outcomesTable').innerHTML = state.outcomes.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.outcomes[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.outcomes.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            ['title','intro','objectives','scenario'].forEach(f => { const el = document.getElementById(`uc_${f}`); if(el) el.value = state[f] || ""; });
         }
 
         function moveStep(i, d) { const n = i+d; if(n>=0 && n<state.steps.length) { [state.steps[i], state.steps[n]] = [state.steps[n], state.steps[i]]; renderAll(); saveToLocal(); } }
@@ -284,11 +308,14 @@
         function addStep() { state.steps.push({actorIdx:0, action:""}); renderAll(); saveToLocal(); }
         function addDataElement() { state.dataElements.push({name:"", def:"", url:""}); renderAll(); saveToLocal(); }
         function addReference() { state.references.push({title:"", url:""}); renderAll(); saveToLocal(); }
+        function addConcept() { state.concepts.push(""); renderAll(); saveToLocal(); }
+        function addDep() { state.deps.push(""); renderAll(); saveToLocal(); }
+        function addOutcome() { state.outcomes.push(""); renderAll(); saveToLocal(); }
 
         function generateMarkdown() {
             const s = state;
-            const swim = `### **6. Interaction Swimlane**\n\n| ${s.actors.map(a=>a.name).join(' | ')} |\n| ${s.actors.map(()=>':---').join(' | ')} |\n` + s.steps.map(st => `| ${s.actors.map((_, ai) => ai == st.actorIdx ? st.action : " ").join(' | ')} |`).join('\n');
-            return [ `## **Use Case: ${s.title}**`, `### **1. Introduction**\n${s.intro}`, `### **2. Objectives**\n${s.objectives}`, `### **3. Scenario**\n${s.scenario}`, `### **4. Actors**\n| Actor | Role |\n| :--- | :--- |\n${s.actors.map(a=>`| **${a.name}** | ${a.desc} |`).join('\n')}`, `### **5. Steps**\n| # | Actor | Action |\n| :--- | :--- | :--- |\n${s.steps.map((st, i)=>`| ${i+1} | ${s.actors[st.actorIdx]?.name} | ${st.action} |`).join('\n')}`, swim, `### **7. Key Concepts**\n${s.concepts}`, `### **8. Data**\n| Name | Def | URL |\n| :--- | :--- | :--- |\n${s.dataElements.map(d=>`| ${d.name} | ${d.def} | ${d.url} |`).join('\n')}`, `### **9. Dependencies**\n${s.deps}`, `### **10. Outcomes**\n${s.outcomes}`, `### **11. References**\n${s.references.map(r=>`* [${r.title}](${r.url})`).join('\n')}` ].join('\n\n---\n\n');
+            const swim = `### **6. Interaction Swimlane**\n\n<table class="swimlane-table"><thead><tr><th>#</th>${s.actors.map(a=>`<th>${a.name}</th>`).join('')}</tr></thead><tbody>` + s.steps.map((st, i) => `<tr><td>${i+1}</td>${s.actors.map((_, ai) => `<td>${ai == st.actorIdx ? st.action : ""}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
+            return [ `## **Use Case: ${s.title}**`, `### **1. Introduction**\n${s.intro}`, `### **2. Objectives**\n${s.objectives}`, `### **3. Scenario**\n${s.scenario}`, `### **4. Actors**\n| Actor | Role |\n| :--- | :--- |\n${s.actors.map(a=>`| **${a.name}** | ${a.desc} |`).join('\n')}`, `### **5. Steps**\n| # | Actor | Action |\n| :--- | :--- | :--- |\n${s.steps.map((st, i)=>`| ${i+1} | ${s.actors[st.actorIdx]?.name} | ${st.action} |`).join('\n')}`, swim, `### **7. Key Concepts**\n${s.concepts.map(c=>`* ${c}`).join('\n')}`, `### **8. Data**\n| Name | Def | URL |\n| :--- | :--- | :--- |\n${s.dataElements.map(d=>`| ${d.name} | ${d.def} | ${d.url} |`).join('\n')}`, `### **9. Dependencies**\n${s.deps.map(d=>`* ${d}`).join('\n')}`, `### **10. Outcomes**\n${s.outcomes.map(o=>`* ${o}`).join('\n')}`, `### **11. References**\n${s.references.map(r=>`* [${r.title}](${r.url})`).join('\n')}` ].join('\n\n---\n\n');
         }
 
         function parseMarkdownToState(title, body) {
@@ -296,10 +323,20 @@
             const parts = body.split(/\n---\n/);
             const find = (n) => parts.find(p => p.includes(`### **${n}.`)) || "";
             const clean = (t) => t.replace(/### \*\*\d+\. .*?\*\*/, "").trim();
-            state.intro = clean(find(1)); state.objectives = clean(find(2)); state.scenario = clean(find(3)); state.concepts = clean(find(7)); state.deps = clean(find(9)); state.outcomes = clean(find(10));
+            state.intro = clean(find(1)); state.objectives = clean(find(2)); state.scenario = clean(find(3));
             const pTable = (c) => c.split('\n').filter(r => r.includes('|') && !r.includes(':---') && !r.includes('| Actor |') && !r.includes('| # |') && !r.includes('| Name |')).map(r => r.split('|').map(x=>x.trim()).filter(x=>x!==""));
             const aRows = pTable(find(4)); state.actors = aRows.map(r => ({name: r[0].replace(/\*\*/g,""), desc: r[1]}));
             const sRows = pTable(find(5)); state.steps = sRows.map(r => ({actorIdx: Math.max(0, state.actors.findIndex(a=>a.name===r[1])), action: r[2]}));
+            const dRows = pTable(find(8)); state.dataElements = dRows.map(r => ({name: r[0], def: r[1], url: r[2]}));
+            const refSection = clean(find(11));
+            state.references = refSection.split('\n').filter(line => line.startsWith('* ')).map(line => {
+                const match = line.match(/\* \[([^\]]+)\]\(([^)]+)\)/);
+                return match ? {title: match[1], url: match[2]} : {title: '', url: ''};
+            });
+            const parseList = (section) => section.split('\n').filter(line => line.trim()).map(line => line.startsWith('* ') ? line.substring(2) : line);
+            state.concepts = parseList(clean(find(7)));
+            state.deps = parseList(clean(find(9)));
+            state.outcomes = parseList(clean(find(10)));
         }
 
         function switchTab(t) {
