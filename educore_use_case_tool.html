@@ -106,7 +106,10 @@
             loadFromLocal();
             await fetchIssues();
             
-            document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('educore_gh_token', e.target.value));
+            document.getElementById('ghToken').addEventListener('blur', async (e) => {
+                localStorage.setItem('educore_gh_token', e.target.value);
+                await fetchIssues();
+            });
             document.getElementById('formContainer').addEventListener('input', () => { 
                 document.getElementById('saveStatus').innerText = "Unsaved Changes"; 
                 updateStateFromDOM();
@@ -133,13 +136,18 @@
             }`;
 
             try {
-                const headers = token ? {'Authorization': `token ${token}`} : {};
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `token ${token}`;
                 const res = await fetch('https://api.github.com/graphql', {
                     method: 'POST',
                     headers: headers,
                     body: JSON.stringify({ query })
                 });
                 const responseData = await res.json();
+                if (!responseData.data) {
+                    console.log("Unable to fetch issues, token may be required for private repository");
+                    return;
+                }
                 const issues = responseData.data.repository.issues.nodes;
                 
                 const selector = document.getElementById('issueSelector');
