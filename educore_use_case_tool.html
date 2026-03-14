@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduCore Use Case Tool - Pro Sync</title>
+    <title>EduCore Use Case Tool - Session Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
     <style>
@@ -20,12 +20,9 @@
         .widget-table th { background-color: #f1f5f9; border: 1px solid #94a3b8; padding: 0.5rem; font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase; text-align: left; }
         .widget-table td { border: 1px solid #94a3b8; padding: 0.25rem; background-color: #ffffff; }
         .ghost-input { border: none !important; background: transparent !important; width: 100% !important; font-weight: 700 !important; padding: 0.25rem !important; }
-        .control-btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 0.25rem; cursor: pointer; }
+        .control-btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 0.25rem; cursor: pointer; border: none; background: none; }
         #preview-content h2 { font-size: 1.875rem; font-weight: 900; margin-top: 3rem; margin-bottom: 1.5rem; border-bottom: 4px solid #0f172a; padding-bottom: 0.5rem; text-transform: uppercase; }
         #preview-content h3 { font-size: 1.25rem; font-weight: 900; margin-top: 2.5rem; margin-bottom: 1rem; text-transform: uppercase; color: #1e293b; }
-        #preview-content table { width: 100%; border-collapse: collapse; border: 1.5pt solid black !important; margin: 2rem 0; }
-        #preview-content th, #preview-content td { border: 1pt solid black !important; padding: 0.75rem; text-align: left; }
-        #preview-content th { background-color: #f1f5f9; font-weight: 900; text-transform: uppercase; font-size: 11px; }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
@@ -54,7 +51,10 @@
 
         <div id="view-edit" class="p-4 md:p-10 w-full box-border">
             <div id="formContainer" class="w-full space-y-6">
-                <div class="section-container"><label class="section-label">0. Title</label><input type="text" id="uc_title"></div>
+                <div class="section-container">
+                    <label class="section-label"><span class="section-num">0.</span> Title</label>
+                    <input type="text" id="uc_title" oninput="state.title=this.value; saveToLocal();">
+                </div>
                 <div class="section-container"><label class="section-label">1. Introduction</label><textarea id="uc_intro" rows="4"></textarea></div>
                 <div class="section-container"><label class="section-label">2. Objectives</label><textarea id="uc_objectives" rows="4"></textarea></div>
                 <div class="section-container"><label class="section-label">3. Scenario</label><textarea id="uc_scenario" rows="4"></textarea></div>
@@ -100,7 +100,13 @@
             loadFromLocal();
             
             document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('educore_gh_token', e.target.value));
-            document.getElementById('formContainer').addEventListener('input', () => { document.getElementById('saveStatus').innerText = "Unsaved Changes"; });
+            
+            // Listen for any input to flag unsaved state
+            document.getElementById('formContainer').addEventListener('input', () => { 
+                document.getElementById('saveStatus').innerText = "Unsaved Changes"; 
+                updateStateFromDOM();
+                saveToLocal();
+            });
         };
 
         async function fetchIssues() {
@@ -113,13 +119,41 @@
                 const issues = await res.json();
                 const selector = document.getElementById('issueSelector');
                 selector.innerHTML = '<option value="new">-- Create New Use Case --</option>';
+                
                 issues.forEach(issue => {
                     const opt = document.createElement('option');
                     opt.value = issue.html_url;
-                    opt.textContent = issue.title.replace('Use Case: ', '');
+                    // Store the cleaned title for matching
+                    opt.dataset.cleanTitle = issue.title.replace('Use Case: ', '').trim();
+                    opt.textContent = opt.dataset.cleanTitle;
                     selector.appendChild(opt);
                 });
-            } catch(e) { console.error("Failed to load issues"); }
+
+                // MATCHING LOGIC: Sync dropdown selection with loaded local state
+                syncDropdownToState();
+
+            } catch(e) { console.error("Failed to load issues", e); }
+        }
+
+        function syncDropdownToState() {
+            const selector = document.getElementById('issueSelector');
+            const currentTitle = (state.title || "").trim();
+            
+            if (!currentTitle) {
+                selector.value = "new";
+                return;
+            }
+
+            for (let i = 0; i < selector.options.length; i++) {
+                if (selector.options[i].dataset.cleanTitle === currentTitle) {
+                    selector.selectedIndex = i;
+                    currentIssueUrl = selector.options[i].value;
+                    lastSyncedState = JSON.stringify(state); // Assume matched load is synced
+                    document.getElementById('saveStatus').innerText = "Linked to GitHub";
+                    return;
+                }
+            }
+            selector.value = "new";
         }
 
         async function handleSelectionChange() {
@@ -127,7 +161,7 @@
             const nextVal = selector.value;
             const hasUnsaved = JSON.stringify(state) !== lastSyncedState;
 
-            if (hasUnsaved) {
+            if (hasUnsaved && lastSyncedState !== "") {
                 const choice = confirm("You have unsaved changes. Would you like to PUBLISH them before switching? (Cancel to discard changes)");
                 if (choice) {
                     await executePublish(currentIssueUrl !== 'new');
@@ -163,12 +197,13 @@
                 lastSyncedState = JSON.stringify(state);
                 renderAll();
                 saveToLocal();
+                document.getElementById('saveStatus').innerText = "Synced with GitHub";
             } catch (e) { alert("Fetch failed"); }
         }
 
         async function handlePublishClick() {
             await executePublish(currentIssueUrl !== 'new');
-            await fetchIssues(); // Refresh list
+            await fetchIssues(); 
         }
 
         async function executePublish(isUpdate) {
@@ -187,7 +222,7 @@
                     currentIssueUrl = d.html_url;
                     lastSyncedState = JSON.stringify(state);
                     document.getElementById('issueSelector').value = currentIssueUrl;
-                    document.getElementById('saveStatus').innerText = "Synced with GitHub";
+                    document.getElementById('saveStatus').innerText = "Published";
                     alert("Success!");
                 }
             } catch (e) { alert("Publish failed"); }
@@ -200,32 +235,35 @@
             saveToLocal();
         }
 
+        function updateStateFromDOM() {
+            ['title','intro','objectives','scenario','concepts','deps','outcomes'].forEach(f => {
+                const el = document.getElementById(`uc_${f}`);
+                if(el) state[f] = el.value;
+            });
+        }
+
         function saveToLocal() { localStorage.setItem('educore_v4_draft', JSON.stringify(state)); }
         
         function loadFromLocal() { 
             const s = localStorage.getItem('educore_v4_draft'); 
-            if(s) {
-                state = JSON.parse(s); 
-                // Note: on load we don't know if it's synced, so we leave lastSyncedState empty to trigger unsaved warning
-            }
+            if(s) state = JSON.parse(s);
             renderAll(); 
         }
 
         function renderAll() {
-            const sync = (arr, i, f) => `oninput="state.${arr}[${i}].${f}=this.value"`;
-            document.getElementById('actorsTable').innerHTML = state.actors.map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" oninput="state.actors[${i}].name=this.value; renderAll()"></td><td><input type="text" value="${it.desc}" class="ghost-input" ${sync('actors',i,'desc')}></td><td><button onclick="state.actors.splice(${i},1);renderAll()" style="color:#f87171;">×</button></td></tr>`).join('');
-            document.getElementById('stepsTable').innerHTML = state.steps.map((it, i) => `<tr><td style="text-align:center; font-weight:900; color:#94a3b8; font-size:10px;">${i+1}</td><td><select onchange="state.steps[${i}].actorIdx=this.value" class="ghost-input">${state.actors.map((a,ai)=>`<option value="${ai}" ${it.actorIdx==ai?'selected':''}>${a.name||'Actor'}</option>`).join('')}</select></td><td><input type="text" value="${it.action}" class="ghost-input" ${sync('steps',i,'action')}></td><td style="display:flex; gap:4px; justify-content:center; padding: 4px;"><button onclick="moveStep(${i}, -1)" class="control-btn" style="color:#3b82f6;">↑</button><button onclick="moveStep(${i}, 1)" class="control-btn" style="color:#3b82f6;">↓</button><button onclick="state.steps.splice(${i},1);renderAll()" class="control-btn" style="color:#f87171;">×</button></td></tr>`).join('');
-            document.getElementById('dataTable').innerHTML = (state.dataElements || []).map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" ${sync('dataElements',i,'name')}></td><td><input type="text" value="${it.def}" class="ghost-input" ${sync('dataElements',i,'def')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('dataElements',i,'url')}></td><td><button onclick="state.dataElements.splice(${i},1);renderAll()" style="color:#f87171;">×</button></td></tr>`).join('');
-            document.getElementById('refsTable').innerHTML = (state.references || []).map((it, i) => `<tr><td><input type="text" value="${it.title}" class="ghost-input" ${sync('references',i,'title')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('references',i,'url')}></td><td><button onclick="state.references.splice(${i},1);renderAll()" style="color:#f87171;">×</button></td></tr>`).join('');
+            const sync = (arr, i, f) => `oninput="state.${arr}[${i}].${f}=this.value; saveToLocal();"`;
+            document.getElementById('actorsTable').innerHTML = state.actors.map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" oninput="state.actors[${i}].name=this.value; renderAll(); saveToLocal();"></td><td><input type="text" value="${it.desc}" class="ghost-input" ${sync('actors',i,'desc')}></td><td><button onclick="state.actors.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            document.getElementById('stepsTable').innerHTML = state.steps.map((it, i) => `<tr><td style="text-align:center; font-weight:900; color:#94a3b8; font-size:10px;">${i+1}</td><td><select onchange="state.steps[${i}].actorIdx=this.value; saveToLocal();" class="ghost-input">${state.actors.map((a,ai)=>`<option value="${ai}" ${it.actorIdx==ai?'selected':''}>${a.name||'Actor'}</option>`).join('')}</select></td><td><input type="text" value="${it.action}" class="ghost-input" ${sync('steps',i,'action')}></td><td style="display:flex; gap:4px; justify-content:center; padding: 4px;"><button onclick="moveStep(${i}, -1)" class="control-btn" style="color:#3b82f6;">↑</button><button onclick="moveStep(${i}, 1)" class="control-btn" style="color:#3b82f6;">↓</button><button onclick="state.steps.splice(${i},1);renderAll();saveToLocal();" class="control-btn" style="color:#f87171;">×</button></td></tr>`).join('');
+            document.getElementById('dataTable').innerHTML = (state.dataElements || []).map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" ${sync('dataElements',i,'name')}></td><td><input type="text" value="${it.def}" class="ghost-input" ${sync('dataElements',i,'def')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('dataElements',i,'url')}></td><td><button onclick="state.dataElements.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            document.getElementById('refsTable').innerHTML = (state.references || []).map((it, i) => `<tr><td><input type="text" value="${it.title}" class="ghost-input" ${sync('references',i,'title')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('references',i,'url')}></td><td><button onclick="state.references.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             ['title','intro','objectives','scenario','concepts','deps','outcomes'].forEach(f => { const el = document.getElementById(`uc_${f}`); if(el) el.value = state[f] || ""; });
         }
 
-        // Re-adding logic helpers
-        function moveStep(i, d) { const n = i+d; if(n>=0 && n<state.steps.length) { [state.steps[i], state.steps[n]] = [state.steps[n], state.steps[i]]; renderAll(); } }
-        function addActor() { state.actors.push({name:"", desc:""}); renderAll(); }
-        function addStep() { state.steps.push({actorIdx:0, action:""}); renderAll(); }
-        function addDataElement() { state.dataElements.push({name:"", def:"", url:""}); renderAll(); }
-        function addReference() { state.references.push({title:"", url:""}); renderAll(); }
+        function moveStep(i, d) { const n = i+d; if(n>=0 && n<state.steps.length) { [state.steps[i], state.steps[n]] = [state.steps[n], state.steps[i]]; renderAll(); saveToLocal(); } }
+        function addActor() { state.actors.push({name:"", desc:""}); renderAll(); saveToLocal(); }
+        function addStep() { state.steps.push({actorIdx:0, action:""}); renderAll(); saveToLocal(); }
+        function addDataElement() { state.dataElements.push({name:"", def:"", url:""}); renderAll(); saveToLocal(); }
+        function addReference() { state.references.push({title:"", url:""}); renderAll(); saveToLocal(); }
         function clearDraft() { if(confirm("Clear draft?")) { localStorage.removeItem('educore_v4_draft'); location.reload(); } }
 
         function generateMarkdown() {
