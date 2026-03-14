@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduCore Use Case Tool - URL Sync</title>
+    <title>EduCore Use Case Tool - Hierarchy Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
     <style>
@@ -15,7 +15,6 @@
         }
         .section-container { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid #e2e8f0; width: 100%; }
         .section-label { display: block; font-size: 0.875rem; font-weight: 900; color: #334155; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 1rem; text-align: left; }
-        .section-num { color: #2563eb; margin-right: 0.25rem; }
         .widget-table { width: 100%; border-collapse: collapse; border: 1px solid #94a3b8; margin-bottom: 1rem; }
         .widget-table th { background-color: #f1f5f9; border: 1px solid #94a3b8; padding: 0.5rem; font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase; text-align: left; }
         .widget-table td { border: 1px solid #94a3b8; padding: 0.25rem; background-color: #ffffff; }
@@ -47,7 +46,7 @@
             <button onclick="switchTab('preview')" id="tab-preview" class="flex-1 py-4 text-xs font-black border-b-4 border-transparent text-slate-400 uppercase tracking-widest">2. Preview Mode</button>
         </nav>
 
-        <div id="view-edit" class="p-4 md:p-10 w-full box-border">
+        <main id="view-edit" class="p-4 md:p-10 w-full box-border">
             <div id="formContainer" class="w-full space-y-6">
                 <div class="section-container"><label class="section-label">0. Title</label><input type="text" id="uc_title" oninput="state.title=this.value; saveToLocal();"></div>
                 <div class="section-container"><label class="section-label">1. Introduction</label><textarea id="uc_intro" rows="4"></textarea></div>
@@ -73,7 +72,7 @@
                     <button onclick="addReference()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Ref</button>
                 </div>
             </div>
-        </div>
+        </main>
 
         <div id="view-preview" class="hidden p-4 md:p-10 bg-slate-100 min-h-screen">
             <div class="w-full max-w-6xl mx-auto bg-white p-8 md:p-16 shadow-2xl border border-black" id="preview-content"></div>
@@ -90,10 +89,7 @@
             const savedToken = localStorage.getItem('educore_gh_token');
             if (savedToken) document.getElementById('ghToken').value = savedToken;
             
-            // 1. Load data from local storage first
             loadFromLocal();
-            
-            // 2. Fetch issues and attempt to match URL
             if (savedToken) await fetchIssues();
             
             document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('educore_gh_token', e.target.value));
@@ -107,33 +103,70 @@
         async function fetchIssues() {
             const token = document.getElementById('ghToken').value;
             if(!token) return;
+
+            const [owner, name] = REPO.split('/');
+            const query = `
+            query {
+              repository(owner: "${owner}", name: "${name}") {
+                issues(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) {
+                  nodes {
+                    title
+                    url
+                    parent { url }
+                  }
+                }
+              }
+            }`;
+
             try {
-                const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`, {
-                    headers: {'Authorization': `token ${token}`}
+                const res = await fetch('https://api.github.com/graphql', {
+                    method: 'POST',
+                    headers: { 'Authorization': `token ${token}` },
+                    body: JSON.stringify({ query })
                 });
-                const issues = await res.json();
+                const responseData = await res.json();
+                const issues = responseData.data.repository.issues.nodes;
+                
                 const selector = document.getElementById('issueSelector');
                 selector.innerHTML = '<option value="new">-- Create New Use Case --</option>';
-                
+
+                // Build a Map of Parent -> Children
+                const issueMap = new Map();
+                const topLevel = [];
+
                 issues.forEach(issue => {
-                    const opt = document.createElement('option');
-                    opt.value = issue.html_url;
-                    opt.textContent = issue.title.replace('Use Case: ', '').trim();
-                    selector.appendChild(opt);
+                    if (!issue.parent) {
+                        topLevel.push(issue);
+                    } else {
+                        if (!issueMap.has(issue.parent.url)) issueMap.set(issue.parent.url, []);
+                        issueMap.get(issue.parent.url).push(issue);
+                    }
                 });
 
-                // SYNC BY URL:
+                // Recursive function to add options with hyphens
+                const addHierarchy = (issue, depth = 0) => {
+                    const opt = document.createElement('option');
+                    opt.value = issue.url;
+                    const prefix = "-".repeat(depth) + (depth > 0 ? " " : "");
+                    opt.textContent = prefix + issue.title.replace('Use Case: ', '').trim();
+                    selector.appendChild(opt);
+
+                    const children = issueMap.get(issue.url) || [];
+                    children.forEach(child => addHierarchy(child, depth + 1));
+                };
+
+                topLevel.forEach(parent => addHierarchy(parent, 0));
+
+                // Session Sync
                 if (currentIssueUrl && currentIssueUrl !== "new") {
                     selector.value = currentIssueUrl;
-                    // If the URL is no longer in the list (closed issue), reset to new
-                    if (selector.value !== currentIssueUrl) {
-                        currentIssueUrl = "new";
-                        selector.value = "new";
-                    } else {
+                    if (selector.value === currentIssueUrl) {
                         document.getElementById('saveStatus').innerText = "Linked to GitHub";
+                    } else {
+                        currentIssueUrl = "new";
                     }
                 }
-            } catch(e) { console.error("GitHub Fetch Error", e); }
+            } catch(e) { console.error("Hierarchy Fetch Failed", e); }
         }
 
         async function handleSelectionChange() {
