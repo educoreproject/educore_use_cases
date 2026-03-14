@@ -104,7 +104,7 @@
             if (savedToken) document.getElementById('ghToken').value = savedToken;
             
             loadFromLocal();
-            if (savedToken) await fetchIssues();
+            await fetchIssues();
             
             document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('educore_gh_token', e.target.value));
             document.getElementById('formContainer').addEventListener('input', () => { 
@@ -116,7 +116,7 @@
 
         async function fetchIssues() {
             const token = document.getElementById('ghToken').value;
-            if(!token) return;
+            // Removed token check to allow fetching public repo issues
 
             const [owner, name] = REPO.split('/');
             const query = `
@@ -133,9 +133,10 @@
             }`;
 
             try {
+                const headers = token ? {'Authorization': `token ${token}`} : {};
                 const res = await fetch('https://api.github.com/graphql', {
                     method: 'POST',
-                    headers: { 'Authorization': `token ${token}` },
+                    headers: headers,
                     body: JSON.stringify({ query })
                 });
                 const responseData = await res.json();
