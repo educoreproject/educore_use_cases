@@ -39,6 +39,7 @@
                     <input type="password" id="ghToken" placeholder="GitHub PAT" style="width: 140px !important; padding: 6px !important; font-size: 10px !important; background: #1e293b !important; color: white !important; border: none !important;">
                     <select id="issueSelector" onchange="handleSelectionChange()" style="width: 240px !important; padding: 6px !important; font-size: 10px !important; background: #1e293b !important; color: white !important; border: none !important;">
                         <option value="new">-- Create New Use Case --</option>
+                        <option disabled style="color: #64748b;">Enter Personal Access Token (PAT) to load existing use cases</option>
                     </select>
                     <button onclick="handlePublishClick()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-[10px] font-black uppercase">Publish / Update</button>
                 </div>
