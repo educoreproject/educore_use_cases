@@ -42,6 +42,7 @@
                         <option disabled style="color: #64748b;">Enter Personal Access Token (PAT) to load existing use cases</option>
                     </select>
                     <button onclick="handlePublishClick()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-[10px] font-black uppercase">Publish / Update</button>
+                    <div id="loading" style="display:none; color: yellow; font-size: 10px; margin-left: 10px;">Loading...</div>
                 </div>
             </div>
         </header>
@@ -120,36 +121,59 @@
 
         async function fetchIssues() {
             const token = document.getElementById('ghToken').value;
-            // Removed token check to allow fetching public repo issues
+            if (!token) return;
 
             const [owner, name] = REPO.split('/');
-            const query = `
-            query {
-              repository(owner: "${owner}", name: "${name}") {
-                issues(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) {
-                  nodes {
-                    title
-                    url
-                    parent { url }
-                  }
-                }
-              }
-            }`;
+            document.getElementById('loading').style.display = 'block';
 
             try {
-                const headers = { 'Content-Type': 'application/json' };
-                if (token) headers['Authorization'] = `token ${token}`;
+                // Try GraphQL first
+                const query = `
+                query {
+                  repository(owner: "${owner}", name: "${name}") {
+                    issues(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) {
+                      nodes {
+                        title
+                        url
+                        parent { url }
+                      }
+                    }
+                  }
+                }`;
+                const headers = { 'Content-Type': 'application/json', 'Authorization': `token ${token}` };
                 const res = await fetch('https://api.github.com/graphql', {
                     method: 'POST',
                     headers: headers,
                     body: JSON.stringify({ query })
                 });
                 const responseData = await res.json();
-                if (!responseData.data) {
-                    console.log("Unable to fetch issues, token may be required for private repository");
+                let issues;
+                if (responseData.data) {
+                    issues = responseData.data.repository.issues.nodes;
+                } else if (responseData.errors && responseData.errors.some(e => e.type === 'RATE_LIMITED')) {
+                    // Fallback to REST API
+                    console.log("Rate limited, falling back to REST API");
+                    const restRes = await fetch(`https://api.github.com/repos/${owner}/${name}/issues`, {
+                        headers: { 'Authorization': `token ${token}` }
+                    });
+                    if (!restRes.ok) {
+                        console.log("REST API also failed");
+                        return;
+                    }
+                    const restIssues = await restRes.json();
+                    // Process into hierarchy format
+                    issues = restIssues.map(issue => {
+                        const parentMatch = issue.body.match(/Parent:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/issues\/\d+)/);
+                        return {
+                            title: issue.title,
+                            url: issue.html_url,
+                            parent: parentMatch ? { url: parentMatch[1] } : null
+                        };
+                    });
+                } else {
+                    console.log("Unable to fetch issues");
                     return;
                 }
-                const issues = responseData.data.repository.issues.nodes;
                 
                 const selector = document.getElementById('issueSelector');
                 selector.innerHTML = '<option value="new">-- Create New Use Case --</option>';
@@ -190,7 +214,10 @@
                         currentIssueUrl = "new";
                     }
                 }
-            } catch(e) { console.error("Hierarchy Fetch Failed", e); }
+            } catch(e) { console.error("Fetch Failed", e); }
+            finally {
+                document.getElementById('loading').style.display = 'none';
+            }
         }
 
         async function handleSelectionChange() {
