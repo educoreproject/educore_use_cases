@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduCore Use Case Tool - Session Sync</title>
+    <title>EduCore Use Case Tool - URL Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
     <style>
@@ -21,8 +21,6 @@
         .widget-table td { border: 1px solid #94a3b8; padding: 0.25rem; background-color: #ffffff; }
         .ghost-input { border: none !important; background: transparent !important; width: 100% !important; font-weight: 700 !important; padding: 0.25rem !important; }
         .control-btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 0.25rem; cursor: pointer; border: none; background: none; }
-        #preview-content h2 { font-size: 1.875rem; font-weight: 900; margin-top: 3rem; margin-bottom: 1.5rem; border-bottom: 4px solid #0f172a; padding-bottom: 0.5rem; text-transform: uppercase; }
-        #preview-content h3 { font-size: 1.25rem; font-weight: 900; margin-top: 2.5rem; margin-bottom: 1rem; text-transform: uppercase; color: #1e293b; }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
@@ -51,10 +49,7 @@
 
         <div id="view-edit" class="p-4 md:p-10 w-full box-border">
             <div id="formContainer" class="w-full space-y-6">
-                <div class="section-container">
-                    <label class="section-label"><span class="section-num">0.</span> Title</label>
-                    <input type="text" id="uc_title" oninput="state.title=this.value; saveToLocal();">
-                </div>
+                <div class="section-container"><label class="section-label">0. Title</label><input type="text" id="uc_title" oninput="state.title=this.value; saveToLocal();"></div>
                 <div class="section-container"><label class="section-label">1. Introduction</label><textarea id="uc_intro" rows="4"></textarea></div>
                 <div class="section-container"><label class="section-label">2. Objectives</label><textarea id="uc_objectives" rows="4"></textarea></div>
                 <div class="section-container"><label class="section-label">3. Scenario</label><textarea id="uc_scenario" rows="4"></textarea></div>
@@ -78,8 +73,8 @@
                     <button onclick="addReference()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Ref</button>
                 </div>
             </div>
-            <div style="text-align: center; padding: 6rem 0;"><button onclick="clearDraft()" style="color: #ef4444; font-weight: 900; text-transform: uppercase; font-size: 0.75rem; border-bottom: 2px solid #fee2e2; cursor: pointer;">× Wipe Local Draft ×</button></div>
         </div>
+
         <div id="view-preview" class="hidden p-4 md:p-10 bg-slate-100 min-h-screen">
             <div class="w-full max-w-6xl mx-auto bg-white p-8 md:p-16 shadow-2xl border border-black" id="preview-content"></div>
         </div>
@@ -93,15 +88,15 @@
 
         window.onload = async () => {
             const savedToken = localStorage.getItem('educore_gh_token');
-            if (savedToken) {
-                document.getElementById('ghToken').value = savedToken;
-                await fetchIssues();
-            }
+            if (savedToken) document.getElementById('ghToken').value = savedToken;
+            
+            // 1. Load data from local storage first
             loadFromLocal();
             
-            document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('educore_gh_token', e.target.value));
+            // 2. Fetch issues and attempt to match URL
+            if (savedToken) await fetchIssues();
             
-            // Listen for any input to flag unsaved state
+            document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('educore_gh_token', e.target.value));
             document.getElementById('formContainer').addEventListener('input', () => { 
                 document.getElementById('saveStatus').innerText = "Unsaved Changes"; 
                 updateStateFromDOM();
@@ -123,37 +118,22 @@
                 issues.forEach(issue => {
                     const opt = document.createElement('option');
                     opt.value = issue.html_url;
-                    // Store the cleaned title for matching
-                    opt.dataset.cleanTitle = issue.title.replace('Use Case: ', '').trim();
-                    opt.textContent = opt.dataset.cleanTitle;
+                    opt.textContent = issue.title.replace('Use Case: ', '').trim();
                     selector.appendChild(opt);
                 });
 
-                // MATCHING LOGIC: Sync dropdown selection with loaded local state
-                syncDropdownToState();
-
-            } catch(e) { console.error("Failed to load issues", e); }
-        }
-
-        function syncDropdownToState() {
-            const selector = document.getElementById('issueSelector');
-            const currentTitle = (state.title || "").trim();
-            
-            if (!currentTitle) {
-                selector.value = "new";
-                return;
-            }
-
-            for (let i = 0; i < selector.options.length; i++) {
-                if (selector.options[i].dataset.cleanTitle === currentTitle) {
-                    selector.selectedIndex = i;
-                    currentIssueUrl = selector.options[i].value;
-                    lastSyncedState = JSON.stringify(state); // Assume matched load is synced
-                    document.getElementById('saveStatus').innerText = "Linked to GitHub";
-                    return;
+                // SYNC BY URL:
+                if (currentIssueUrl && currentIssueUrl !== "new") {
+                    selector.value = currentIssueUrl;
+                    // If the URL is no longer in the list (closed issue), reset to new
+                    if (selector.value !== currentIssueUrl) {
+                        currentIssueUrl = "new";
+                        selector.value = "new";
+                    } else {
+                        document.getElementById('saveStatus').innerText = "Linked to GitHub";
+                    }
                 }
-            }
-            selector.value = "new";
+            } catch(e) { console.error("GitHub Fetch Error", e); }
         }
 
         async function handleSelectionChange() {
@@ -162,23 +142,23 @@
             const hasUnsaved = JSON.stringify(state) !== lastSyncedState;
 
             if (hasUnsaved && lastSyncedState !== "") {
-                const choice = confirm("You have unsaved changes. Would you like to PUBLISH them before switching? (Cancel to discard changes)");
-                if (choice) {
-                    await executePublish(currentIssueUrl !== 'new');
-                }
+                const choice = confirm("Unsaved changes detected. Publish now?");
+                if (choice) await executePublish(currentIssueUrl !== 'new');
             }
 
             if (nextVal === 'new') {
-                if(confirm("Create a new use case? This will clear the current form.")) {
+                if(confirm("Start new use case? Clear form?")) {
                     resetForm();
                     currentIssueUrl = 'new';
+                    saveToLocal();
                 } else {
                     selector.value = currentIssueUrl;
                 }
             } else {
-                if (confirm(`Fetch Use Case: "${selector.options[selector.selectedIndex].text}"?`)) {
+                if (confirm(`Fetch this use case from GitHub?`)) {
                     await fetchSpecificIssue(nextVal);
                     currentIssueUrl = nextVal;
+                    saveToLocal();
                 } else {
                     selector.value = currentIssueUrl;
                 }
@@ -197,7 +177,7 @@
                 lastSyncedState = JSON.stringify(state);
                 renderAll();
                 saveToLocal();
-                document.getElementById('saveStatus').innerText = "Synced with GitHub";
+                document.getElementById('saveStatus').innerText = "Synced";
             } catch (e) { alert("Fetch failed"); }
         }
 
@@ -221,9 +201,9 @@
                     const d = await res.json();
                     currentIssueUrl = d.html_url;
                     lastSyncedState = JSON.stringify(state);
+                    saveToLocal();
                     document.getElementById('issueSelector').value = currentIssueUrl;
-                    document.getElementById('saveStatus').innerText = "Published";
-                    alert("Success!");
+                    alert("Published!");
                 }
             } catch (e) { alert("Publish failed"); }
         }
@@ -232,7 +212,6 @@
             state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: "", dataElements: [], deps: "", outcomes: "", references: [] };
             lastSyncedState = JSON.stringify(state);
             renderAll();
-            saveToLocal();
         }
 
         function updateStateFromDOM() {
@@ -242,11 +221,19 @@
             });
         }
 
-        function saveToLocal() { localStorage.setItem('educore_v4_draft', JSON.stringify(state)); }
+        function saveToLocal() {
+            localStorage.setItem('educore_v4_draft', JSON.stringify(state));
+            localStorage.setItem('educore_v4_url', currentIssueUrl);
+            localStorage.setItem('educore_v4_sync', lastSyncedState);
+        }
         
         function loadFromLocal() { 
             const s = localStorage.getItem('educore_v4_draft'); 
+            const u = localStorage.getItem('educore_v4_url');
+            const sy = localStorage.getItem('educore_v4_sync');
             if(s) state = JSON.parse(s);
+            if(u) currentIssueUrl = u;
+            if(sy) lastSyncedState = sy;
             renderAll(); 
         }
 
@@ -264,13 +251,11 @@
         function addStep() { state.steps.push({actorIdx:0, action:""}); renderAll(); saveToLocal(); }
         function addDataElement() { state.dataElements.push({name:"", def:"", url:""}); renderAll(); saveToLocal(); }
         function addReference() { state.references.push({title:"", url:""}); renderAll(); saveToLocal(); }
-        function clearDraft() { if(confirm("Clear draft?")) { localStorage.removeItem('educore_v4_draft'); location.reload(); } }
 
         function generateMarkdown() {
             const s = state;
             const swim = `### **6. Interaction Swimlane**\n\n| ${s.actors.map(a=>a.name).join(' | ')} |\n| ${s.actors.map(()=>':---').join(' | ')} |\n` + s.steps.map(st => `| ${s.actors.map((_, ai) => ai == st.actorIdx ? st.action : " ").join(' | ')} |`).join('\n');
-            const sections = [ `## **Use Case: ${s.title}**`, `### **1. Introduction**\n${s.intro}`, `### **2. Objectives**\n${s.objectives}`, `### **3. Scenario**\n${s.scenario}`, `### **4. Actors**\n| Actor | Role |\n| :--- | :--- |\n${s.actors.map(a=>`| **${a.name}** | ${a.desc} |`).join('\n')}`, `### **5. Steps**\n| # | Actor | Action |\n| :--- | :--- | :--- |\n${s.steps.map((st, i)=>`| ${i+1} | ${s.actors[st.actorIdx]?.name} | ${st.action} |`).join('\n')}`, swim, `### **7. Key Concepts**\n${s.concepts}`, `### **8. Data**\n| Name | Def | URL |\n| :--- | :--- | :--- |\n${s.dataElements.map(d=>`| ${d.name} | ${d.def} | ${d.url} |`).join('\n')}`, `### **9. Dependencies**\n${s.deps}`, `### **10. Outcomes**\n${s.outcomes}`, `### **11. References**\n${s.references.map(r=>`* [${r.title}](${r.url})`).join('\n')}` ];
-            return sections.join('\n\n---\n\n');
+            return [ `## **Use Case: ${s.title}**`, `### **1. Introduction**\n${s.intro}`, `### **2. Objectives**\n${s.objectives}`, `### **3. Scenario**\n${s.scenario}`, `### **4. Actors**\n| Actor | Role |\n| :--- | :--- |\n${s.actors.map(a=>`| **${a.name}** | ${a.desc} |`).join('\n')}`, `### **5. Steps**\n| # | Actor | Action |\n| :--- | :--- | :--- |\n${s.steps.map((st, i)=>`| ${i+1} | ${s.actors[st.actorIdx]?.name} | ${st.action} |`).join('\n')}`, swim, `### **7. Key Concepts**\n${s.concepts}`, `### **8. Data**\n| Name | Def | URL |\n| :--- | :--- | :--- |\n${s.dataElements.map(d=>`| ${d.name} | ${d.def} | ${d.url} |`).join('\n')}`, `### **9. Dependencies**\n${s.deps}`, `### **10. Outcomes**\n${s.outcomes}`, `### **11. References**\n${s.references.map(r=>`* [${r.title}](${r.url})`).join('\n')}` ].join('\n\n---\n\n');
         }
 
         function parseMarkdownToState(title, body) {
