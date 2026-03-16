@@ -15,10 +15,11 @@
         }
         .section-container { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid #e2e8f0; width: 100%; }
         .section-label { display: block; font-size: 0.875rem; font-weight: 900; color: #334155; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 1rem; text-align: left; }
-        .widget-table { width: 100%; border-collapse: collapse; border: 1px solid #94a3b8; margin-bottom: 1rem; }
+        .widget-table { width: 100%; border-collapse: collapse; border: 1px solid #94a3b8; margin-bottom: 1rem; table-layout: fixed; }
         .widget-table th { background-color: #f1f5f9; border: 1px solid #94a3b8; padding: 0.5rem; font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase; text-align: left; }
-        .widget-table td { border: 1px solid #94a3b8; padding: 0.25rem; background-color: #ffffff; }
+        .widget-table td { border: 1px solid #94a3b8; padding: 0.25rem; background-color: #ffffff; vertical-align: top; font-size: 13px; }
         .ghost-input { border: none !important; background: transparent !important; width: 100% !important; font-weight: 700 !important; padding: 0.25rem !important; }
+        .ghost-textarea { border: none !important; background: transparent !important; width: 100% !important; padding: 0.25rem !important; resize: vertical; min-height: 40px; font-size: 0.875rem; }
         .control-btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 0.25rem; cursor: pointer; border: none; background: none; }
         #preview-content table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
         #preview-content th, #preview-content td { border: 1px solid #000; padding: 0.5rem; text-align: left; }
@@ -39,7 +40,6 @@
                     <input type="password" id="ghToken" placeholder="GitHub PAT" style="width: 140px !important; padding: 6px !important; font-size: 10px !important; background: #1e293b !important; color: white !important; border: none !important;">
                     <select id="issueSelector" onchange="handleSelectionChange()" style="width: 240px !important; padding: 6px !important; font-size: 10px !important; background: #1e293b !important; color: white !important; border: none !important;">
                         <option value="new">-- Create New Use Case --</option>
-                        <option disabled style="color: #64748b;">Enter Personal Access Token (PAT) to load existing use cases</option>
                     </select>
                     <button onclick="handlePublishClick()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-[10px] font-black uppercase">Publish / Update</button>
                     <div id="loading" style="display:none; color: yellow; font-size: 10px; margin-left: 10px;">Loading...</div>
@@ -54,6 +54,11 @@
         </nav>
 
         <main id="view-edit" class="p-4 md:p-10 w-full box-border">
+            <div id="ghLinkContainer" class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm hidden">
+                <span class="font-bold text-blue-900">Link to this use case in GitHub:</span> 
+                <a id="ghIssueLink" href="#" target="_blank" class="text-blue-600 underline ml-1 font-mono"></a>
+            </div>
+
             <div id="formContainer" class="w-full space-y-6">
                 <div class="section-container"><label class="section-label">0. Title</label><input type="text" id="uc_title" oninput="state.title=this.value; saveToLocal();"></div>
                 <div class="section-container"><label class="section-label">1. Introduction</label><textarea id="uc_intro" rows="4"></textarea></div>
@@ -73,8 +78,11 @@
                     <button onclick="addConcept()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Concept</button>
                 </div>
                 <div class="section-container"><label class="section-label">8. Data Elements</label>
-                    <table class="widget-table"><thead><tr><th>Name</th><th>Definition</th><th>URL</th><th width="40"></th></tr></thead><tbody id="dataTable"></tbody></table>
-                    <button onclick="addDataElement()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Data</button>
+                    <table class="widget-table">
+                        <thead><tr><th width="20%">Name</th><th width="30%">Definition</th><th width="20%">URL</th><th>Notes</th><th width="40"></th></tr></thead>
+                        <tbody id="dataTable"></tbody>
+                    </table>
+                    <button onclick="addDataElement()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Data Row</button>
                 </div>
                 <div class="section-container"><label class="section-label">9. Dependencies</label>
                     <table class="widget-table"><tbody id="depsTable"></tbody></table>
@@ -88,6 +96,10 @@
                     <table class="widget-table"><thead><tr><th>Title</th><th>URL</th><th width="40"></th></tr></thead><tbody id="refsTable"></tbody></table>
                     <button onclick="addReference()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Ref</button>
                 </div>
+                <div class="section-container"><label class="section-label">12. Open Comments (From GitHub)</label>
+                    <table class="widget-table"><thead><tr><th width="100">Link</th><th>Comment Text</th></tr></thead><tbody id="commentsTable"></tbody></table>
+                    <p class="text-[10px] text-slate-400 italic">Comments are fetched automatically from GitHub and cannot be edited here. Link to the comment to edit or respond.</p>
+                </div>
             </div>
         </main>
 
@@ -98,17 +110,15 @@
 
     <script>
         const REPO = "INFERable-app/educate_use_cases";
-        let state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [] };
+        let state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [], comments: [] };
         let lastSyncedState = ""; 
         let currentIssueUrl = "new";
 
         window.onload = async () => {
             const savedToken = localStorage.getItem('educore_gh_token');
             if (savedToken) document.getElementById('ghToken').value = savedToken;
-            
             loadFromLocal();
             await fetchIssues();
-            
             document.getElementById('ghToken').addEventListener('blur', async (e) => {
                 localStorage.setItem('educore_gh_token', e.target.value);
                 await fetchIssues();
@@ -126,20 +136,15 @@
             const loadingEl = document.getElementById('loading');
             const warningEl = document.getElementById('hierarchyWarning');
             const selector = document.getElementById('issueSelector');
-
             if (loadingEl) loadingEl.style.display = 'block';
             if (warningEl) warningEl.style.display = 'none';
 
             try {
                 let issues = [];
-
-                // 1. Check for Token before attempting GraphQL
                 if (!token) {
-                    console.warn("No PAT provided. Falling back to REST (No native hierarchy).");
                     if (warningEl) warningEl.style.display = 'inline';
                     await performRestFallback();
                 } else {
-                    // 2. Attempt GraphQL (Native Hierarchy)
                     const query = `query {
                         repository(owner: "${owner}", name: "${name}") {
                             issues(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) {
@@ -147,14 +152,12 @@
                             }
                         }
                     }`;
-
                     const res = await fetch('https://api.github.com/graphql', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `token ${token}` },
                         body: JSON.stringify({ query })
                     });
                     const responseData = await res.json();
-
                     if (res.ok && responseData.data) {
                         issues = responseData.data.repository.issues.nodes;
                     } else {
@@ -165,21 +168,17 @@
 
                 async function performRestFallback() {
                     const restHeaders = token ? { 'Authorization': `token ${token}` } : {};
-                    const restRes = await fetch(`https://api.github.com/repos/${owner}/${name}/issues?state=open&per_page=100`, {
-                        headers: restHeaders
-                    });
+                    const restRes = await fetch(`https://api.github.com/repos/${owner}/${name}/issues?state=open&per_page=100`, { headers: restHeaders });
                     if (restRes.ok) {
                         const restData = await restRes.json();
                         issues = restData.map(i => ({
                             title: i.title,
                             url: i.html_url,
-                            parent: (i.body || "").match(/Parent:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/issues\/\d+)/i) 
-                                    ? { url: RegExp.$1 } : null
+                            parent: (i.body || "").match(/Parent:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/issues\/\d+)/i) ? { url: RegExp.$1 } : null
                         }));
                     }
                 }
 
-                // 3. Render the Dropdown
                 selector.innerHTML = '<option value="new">-- Create New Use Case --</option>';
                 const issueMap = new Map();
                 const topLevel = [];
@@ -203,10 +202,9 @@
                     selector.appendChild(opt);
                     (issueMap.get(issue.url) || []).forEach(child => addHierarchy(child, depth + 1));
                 };
-
                 topLevel.forEach(p => addHierarchy(p, 0));
                 if (currentIssueUrl) selector.value = currentIssueUrl;
-
+                updateGhLinkUI();
             } catch(e) { 
                 console.error("Fetch Failed", e); 
                 if (warningEl) warningEl.style.display = 'inline';
@@ -215,32 +213,29 @@
             }
         }
 
+        function updateGhLinkUI() {
+            const container = document.getElementById('ghLinkContainer');
+            const link = document.getElementById('ghIssueLink');
+            if (currentIssueUrl && currentIssueUrl !== 'new') {
+                container.classList.remove('hidden');
+                link.href = currentIssueUrl;
+                link.textContent = currentIssueUrl;
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
         async function handleSelectionChange() {
             const selector = document.getElementById('issueSelector');
             const nextVal = selector.value;
             const hasUnsaved = JSON.stringify(state) !== lastSyncedState;
-
             if (hasUnsaved && lastSyncedState !== "") {
-                const choice = confirm("Unsaved changes detected. Publish now?");
-                if (choice) await executePublish(currentIssueUrl !== 'new');
+                if (confirm("Unsaved changes detected. Publish now?")) await executePublish(currentIssueUrl !== 'new');
             }
-
             if (nextVal === 'new') {
-                if(confirm("Start new use case? Clear form?")) {
-                    resetForm();
-                    currentIssueUrl = 'new';
-                    saveToLocal();
-                } else {
-                    selector.value = currentIssueUrl;
-                }
+                if(confirm("Start new use case? Clear form?")) { resetForm(); currentIssueUrl = 'new'; saveToLocal(); updateGhLinkUI(); } else { selector.value = currentIssueUrl; }
             } else {
-                if (confirm(`Fetch this use case from GitHub?`)) {
-                    await fetchSpecificIssue(nextVal);
-                    currentIssueUrl = nextVal;
-                    saveToLocal();
-                } else {
-                    selector.value = currentIssueUrl;
-                }
+                if (confirm(`Fetch this use case from GitHub?`)) { await fetchSpecificIssue(nextVal); currentIssueUrl = nextVal; saveToLocal(); updateGhLinkUI(); } else { selector.value = currentIssueUrl; }
             }
         }
 
@@ -248,10 +243,14 @@
             const token = document.getElementById('ghToken').value;
             const id = url.split('/').pop();
             try {
-                const res = await fetch(`https://api.github.com/repos/${REPO}/issues/${id}`, {
-                    headers: token ? {'Authorization': `token ${token}`} : {}
-                });
+                const res = await fetch(`https://api.github.com/repos/${REPO}/issues/${id}`, { headers: token ? {'Authorization': `token ${token}`} : {} });
                 const data = await res.json();
+                
+                // Fetch Comments
+                const commRes = await fetch(data.comments_url, { headers: token ? {'Authorization': `token ${token}`} : {} });
+                const commData = await commRes.json();
+                state.comments = commData.map(c => ({ url: c.html_url, text: c.body }));
+
                 parseMarkdownToState(data.title, data.body);
                 lastSyncedState = JSON.stringify(state);
                 renderAll();
@@ -261,16 +260,12 @@
             } catch (e) { alert("Fetch failed"); }
         }
 
-        async function handlePublishClick() {
-            await executePublish(currentIssueUrl !== 'new');
-            await fetchIssues(); 
-        }
+        async function handlePublishClick() { await executePublish(currentIssueUrl !== 'new'); await fetchIssues(); }
 
         async function executePublish(isUpdate) {
             const token = document.getElementById('ghToken').value;
             if(!token) return alert("PAT Required");
             const apiUrl = isUpdate ? `https://api.github.com/repos/${REPO}/issues/${currentIssueUrl.split('/').pop()}` : `https://api.github.com/repos/${REPO}/issues`;
-            
             try {
                 const res = await fetch(apiUrl, {
                     method: isUpdate ? 'PATCH' : 'POST',
@@ -283,13 +278,14 @@
                     lastSyncedState = JSON.stringify(state);
                     saveToLocal();
                     document.getElementById('issueSelector').value = currentIssueUrl;
+                    updateGhLinkUI();
                     alert("Published!");
                 }
             } catch (e) { alert("Publish failed"); }
         }
 
         function resetForm() {
-            state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [] };
+            state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [], comments: [] };
             lastSyncedState = JSON.stringify(state);
             renderAll();
         }
@@ -313,10 +309,8 @@
             const sy = localStorage.getItem('educore_v4_sync');
             if(s) {
                 state = JSON.parse(s);
-                // Convert old string fields to arrays
-                if (typeof state.concepts === 'string') state.concepts = state.concepts ? [state.concepts] : [];
-                if (typeof state.deps === 'string') state.deps = state.deps ? [state.deps] : [];
-                if (typeof state.outcomes === 'string') state.outcomes = state.outcomes ? [state.outcomes] : [];
+                state.dataElements = (state.dataElements || []).map(d => ({ ...d, notes: d.notes || "" }));
+                if (!state.comments) state.comments = [];
             }
             if(u) currentIssueUrl = u;
             if(sy) lastSyncedState = sy;
@@ -327,18 +321,23 @@
             const sync = (arr, i, f) => `oninput="state.${arr}[${i}].${f}=this.value; saveToLocal();"`;
             document.getElementById('actorsTable').innerHTML = state.actors.map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" onblur="state.actors[${i}].name=this.value; renderAll(); saveToLocal();"></td><td><input type="text" value="${it.desc}" class="ghost-input" ${sync('actors',i,'desc')}></td><td><button onclick="state.actors.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('stepsTable').innerHTML = state.steps.map((it, i) => `<tr><td style="text-align:center; font-weight:900; color:#94a3b8; font-size:10px;">${i+1}</td><td><select onchange="state.steps[${i}].actorIdx=this.value; saveToLocal();" class="ghost-input">${state.actors.map((a,ai)=>`<option value="${ai}" ${it.actorIdx==ai?'selected':''}>${a.name||'Actor'}</option>`).join('')}</select></td><td><input type="text" value="${it.action}" class="ghost-input" ${sync('steps',i,'action')}></td><td style="display:flex; gap:4px; justify-content:center; padding: 4px;"><button onclick="moveStep(${i}, -1)" class="control-btn" style="color:#3b82f6;">↑</button><button onclick="moveStep(${i}, 1)" class="control-btn" style="color:#3b82f6;">↓</button><button onclick="state.steps.splice(${i},1);renderAll();saveToLocal();" class="control-btn" style="color:#f87171;">×</button></td></tr>`).join('');
-            document.getElementById('dataTable').innerHTML = (state.dataElements || []).map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" ${sync('dataElements',i,'name')}></td><td><input type="text" value="${it.def}" class="ghost-input" ${sync('dataElements',i,'def')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('dataElements',i,'url')}></td><td><button onclick="state.dataElements.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            document.getElementById('dataTable').innerHTML = (state.dataElements || []).map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" ${sync('dataElements',i,'name')}></td><td><input type="text" value="${it.def}" class="ghost-input" ${sync('dataElements',i,'def')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('dataElements',i,'url')}></td><td><textarea class="ghost-textarea" oninput="state.dataElements[${i}].notes=this.value; saveToLocal();">${it.notes || ""}</textarea></td><td><button onclick="state.dataElements.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('refsTable').innerHTML = (state.references || []).map((it, i) => `<tr><td><input type="text" value="${it.title}" class="ghost-input" ${sync('references',i,'title')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('references',i,'url')}></td><td><button onclick="state.references.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('conceptsTable').innerHTML = state.concepts.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.concepts[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.concepts.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('depsTable').innerHTML = state.deps.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.deps[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.deps.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('outcomesTable').innerHTML = state.outcomes.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.outcomes[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.outcomes.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            
+            // Render Comments Table
+            document.getElementById('commentsTable').innerHTML = (state.comments || []).map(c => `<tr><td><a href="${c.url}" target="_blank" class="text-blue-600 underline font-bold">[view]</a></td><td class="text-slate-700">${c.text}</td></tr>`).join('');
+            
             ['title','intro','objectives','scenario'].forEach(f => { const el = document.getElementById(`uc_${f}`); if(el) el.value = state[f] || ""; });
+            updateGhLinkUI();
         }
 
         function moveStep(i, d) { const n = i+d; if(n>=0 && n<state.steps.length) { [state.steps[i], state.steps[n]] = [state.steps[n], state.steps[i]]; renderAll(); saveToLocal(); } }
         function addActor() { state.actors.push({name:"", desc:""}); renderAll(); saveToLocal(); }
         function addStep() { state.steps.push({actorIdx:0, action:""}); renderAll(); saveToLocal(); }
-        function addDataElement() { state.dataElements.push({name:"", def:"", url:""}); renderAll(); saveToLocal(); }
+        function addDataElement() { state.dataElements.push({name:"", def:"", url:"", notes:""}); renderAll(); saveToLocal(); }
         function addReference() { state.references.push({title:"", url:""}); renderAll(); saveToLocal(); }
         function addConcept() { state.concepts.push(""); renderAll(); saveToLocal(); }
         function addDep() { state.deps.push(""); renderAll(); saveToLocal(); }
@@ -347,7 +346,10 @@
         function generateMarkdown() {
             const s = state;
             const swim = `### **6. Interaction Swimlane**\n\n<table class="swimlane-table"><thead><tr><th>#</th>${s.actors.map(a=>`<th>${a.name}</th>`).join('')}</tr></thead><tbody>` + s.steps.map((st, i) => `<tr><td>${i+1}</td>${s.actors.map((_, ai) => `<td>${ai == st.actorIdx ? st.action : ""}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
-            return [ `## **Use Case: ${s.title}**`, `### **1. Introduction**\n${s.intro}`, `### **2. Objectives**\n${s.objectives}`, `### **3. Scenario**\n${s.scenario}`, `### **4. Actors**\n| Actor | Role |\n| :--- | :--- |\n${s.actors.map(a=>`| **${a.name}** | ${a.desc} |`).join('\n')}`, `### **5. Steps**\n| # | Actor | Action |\n| :--- | :--- | :--- |\n${s.steps.map((st, i)=>`| ${i+1} | ${s.actors[st.actorIdx]?.name} | ${st.action} |`).join('\n')}`, swim, `### **7. Key Concepts**\n${s.concepts.map(c=>`* ${c}`).join('\n')}`, `### **8. Data**\n| Name | Def | URL |\n| :--- | :--- | :--- |\n${s.dataElements.map(d=>`| ${d.name} | ${d.def} | ${d.url} |`).join('\n')}`, `### **9. Dependencies**\n${s.deps.map(d=>`* ${d}`).join('\n')}`, `### **10. Outcomes**\n${s.outcomes.map(o=>`* ${o}`).join('\n')}`, `### **11. References**\n${s.references.map(r=>`* [${r.title}](${r.url})`).join('\n')}` ].join('\n\n---\n\n');
+            const dataMd = `### **8. Data**\n| Name | Def | URL | Notes |\n| :--- | :--- | :--- | :--- |\n` + s.dataElements.map(d=>`| ${d.name} | ${d.def} | ${d.url} | ${(d.notes || "").replace(/\n/g, '<br>')} |`).join('\n');
+            const commMd = `### **12. Open Comments**\n| Comment Link | Comment Text |\n| :--- | :--- |\n` + s.comments.map(c=>`| [view](${c.url}) | ${c.text.replace(/\n/g, ' ')} |`).join('\n');
+
+            return [ `## **Use Case: ${s.title}**`, `### **1. Introduction**\n${s.intro}`, `### **2. Objectives**\n${s.objectives}`, `### **3. Scenario**\n${s.scenario}`, `### **4. Actors**\n| Actor | Role |\n| :--- | :--- |\n${s.actors.map(a=>`| **${a.name}** | ${a.desc} |`).join('\n')}`, `### **5. Steps**\n| # | Actor | Action |\n| :--- | :--- | :--- |\n${s.steps.map((st, i)=>`| ${i+1} | ${s.actors[st.actorIdx]?.name} | ${st.action} |`).join('\n')}`, swim, `### **7. Key Concepts**\n${s.concepts.map(c=>`* ${c}`).join('\n')}`, dataMd, `### **9. Dependencies**\n${s.deps.map(d=>`* ${d}`).join('\n')}`, `### **10. Outcomes**\n${s.outcomes.map(o=>`* ${o}`).join('\n')}`, `### **11. References**\n${s.references.map(r=>`* [${r.title}](${r.url})`).join('\n')}`, commMd ].join('\n\n---\n\n');
         }
 
         function parseMarkdownToState(title, body) {
@@ -356,10 +358,10 @@
             const find = (n) => parts.find(p => p.includes(`### **${n}.`)) || "";
             const clean = (t) => t.replace(/### \*\*\d+\. .*?\*\*/, "").trim();
             state.intro = clean(find(1)); state.objectives = clean(find(2)); state.scenario = clean(find(3));
-            const pTable = (c) => c.split('\n').filter(r => r.includes('|') && !r.includes(':---') && !r.includes('| Actor |') && !r.includes('| # |') && !r.includes('| Name |')).map(r => r.split('|').map(x=>x.trim()).filter(x=>x!==""));
+            const pTable = (c) => c.split('\n').filter(r => r.includes('|') && !r.includes(':---') && !r.includes('| Actor |') && !r.includes('| # |') && !r.includes('| Name |') && !r.includes('| Comment Link |')).map(r => r.split('|').map(x=>x.trim()).filter(x=>x!==""));
             const aRows = pTable(find(4)); state.actors = aRows.map(r => ({name: r[0].replace(/\*\*/g,""), desc: r[1]}));
             const sRows = pTable(find(5)); state.steps = sRows.map(r => ({actorIdx: Math.max(0, state.actors.findIndex(a=>a.name===r[1])), action: r[2]}));
-            const dRows = pTable(find(8)); state.dataElements = dRows.map(r => ({name: r[0], def: r[1], url: r[2]}));
+            const dRows = pTable(find(8)); state.dataElements = dRows.map(r => ({ name: r[0] || "", def: r[1] || "", url: r[2] || "", notes: (r[3] || "").replace(/<br>/g, '\n') }));
             const refSection = clean(find(11));
             state.references = refSection.split('\n').filter(line => line.startsWith('* ')).map(line => {
                 const match = line.match(/\* \[([^\]]+)\]\(([^)]+)\)/);
@@ -369,6 +371,7 @@
             state.concepts = parseList(clean(find(7)));
             state.deps = parseList(clean(find(9)));
             state.outcomes = parseList(clean(find(10)));
+            // Comments are handled separately via API fetch in fetchSpecificIssue
         }
 
         function switchTab(t) {
@@ -377,10 +380,7 @@
             document.getElementById('view-preview').classList.toggle('hidden', isE);
             document.getElementById('tab-edit').style.borderBottomColor = isE ? '#2563eb' : 'transparent';
             document.getElementById('tab-preview').style.borderBottomColor = !isE ? '#2563eb' : 'transparent';
-            if(!isE) {
-                updateStateFromDOM();
-                document.getElementById('preview-content').innerHTML = marked.parse(generateMarkdown());
-            }
+            if(!isE) { updateStateFromDOM(); document.getElementById('preview-content').innerHTML = marked.parse(generateMarkdown()); }
         }
     </script>
 </body>
