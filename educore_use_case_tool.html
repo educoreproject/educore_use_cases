@@ -19,12 +19,12 @@
         .widget-table th { background-color: #f1f5f9; border: 1px solid #94a3b8; padding: 0.5rem; font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase; text-align: left; }
         .widget-table td { border: 1px solid #94a3b8; padding: 0.25rem; background-color: #ffffff; vertical-align: top; font-size: 13px; }
         .ghost-input { border: none !important; background: transparent !important; width: 100% !important; font-weight: 700 !important; padding: 0.25rem !important; }
-        .ghost-textarea { border: none !important; background: transparent !important; width: 100% !important; padding: 0.25rem !important; resize: vertical; min-height: 40px; font-size: 0.875rem; }
         .control-btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 0.25rem; cursor: pointer; border: none; background: none; }
         #preview-content table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
         #preview-content th, #preview-content td { border: 1px solid #000; padding: 0.5rem; text-align: left; }
         #preview-content table:not(.swimlane-table) tr:nth-child(even) { background-color: #f9f9f9; }
         .swimlane-table td:nth-child(even) { background-color: #f9f9f9; }
+        .tag-pill { display: inline-flex; align-items: center; background: #e2e8f0; padding: 2px 8px; border-radius: 999px; font-size: 11px; margin: 2px; font-weight: 600; border: 1px solid #cbd5e1; }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
@@ -43,7 +43,6 @@
                     </select>
                     <button onclick="handlePublishClick()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-[10px] font-black uppercase">Publish / Update</button>
                     <div id="loading" style="display:none; color: yellow; font-size: 10px; margin-left: 10px;">Loading...</div>
-                    <div id="hierarchyWarning" style="display:none; color: #fbbf24; font-size: 10px; margin-left: 10px; font-weight: bold;">⚠️ Hierarchy Unavailable (Token Required)</div>
                 </div>
             </div>
         </header>
@@ -54,51 +53,88 @@
         </nav>
 
         <main id="view-edit" class="p-4 md:p-10 w-full box-border">
-            <div id="ghLinkContainer" class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm hidden">
-                <span class="font-bold text-blue-900">Link to this use case in GitHub:</span> 
-                <a id="ghIssueLink" href="#" target="_blank" class="text-blue-600 underline ml-1 font-mono"></a>
-            </div>
-
             <div id="formContainer" class="w-full space-y-6">
                 <div class="section-container"><label class="section-label">0. Title</label><input type="text" id="uc_title" oninput="state.title=this.value; saveToLocal();"></div>
                 <div class="section-container"><label class="section-label">1. Introduction</label><textarea id="uc_intro" rows="4"></textarea></div>
                 <div class="section-container"><label class="section-label">2. Objectives</label><textarea id="uc_objectives" rows="4"></textarea></div>
                 <div class="section-container"><label class="section-label">3. Scenario</label><textarea id="uc_scenario" rows="4"></textarea></div>
+                
                 <div class="section-container"><label class="section-label">4. Actors</label>
                     <table class="widget-table"><thead><tr><th width="30%">Actor</th><th>Role</th><th width="40"></th></tr></thead><tbody id="actorsTable"></tbody></table>
                     <button onclick="addActor()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Actor</button>
                 </div>
+
                 <div class="section-container"><label class="section-label">5. Steps</label>
                     <table class="widget-table"><thead><tr><th width="50">#</th><th width="25%">Actor</th><th>Action</th><th width="120">Move</th></tr></thead><tbody id="stepsTable"></tbody></table>
                     <button onclick="addStep()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Step</button>
                 </div>
-                <div class="section-container"><label class="section-label">6. Interaction Swimlane</label><p>The swimlane will be generated in Preview Mode.</p></div>
+
+                <div class="section-container"><label class="section-label">6. Interaction Swimlane</label><p class="text-xs text-slate-500">The swimlane is generated automatically in Preview Mode.</p></div>
+
                 <div class="section-container"><label class="section-label">7. Key Concepts</label>
                     <table class="widget-table"><tbody id="conceptsTable"></tbody></table>
                     <button onclick="addConcept()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Concept</button>
                 </div>
+
                 <div class="section-container"><label class="section-label">8. Data Elements</label>
-                    <table class="widget-table">
-                        <thead><tr><th width="20%">Name</th><th width="30%">Definition</th><th width="20%">URL</th><th>Notes</th><th width="40"></th></tr></thead>
-                        <tbody id="dataTable"></tbody>
-                    </table>
-                    <button onclick="addDataElement()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Data Row</button>
+                    <table class="widget-table"><thead><tr><th>Name</th><th>Definition</th><th>URL</th><th width="40"></th></tr></thead><tbody id="dataTable"></tbody></table>
+                    <button onclick="addDataElement()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Data</button>
                 </div>
+
                 <div class="section-container"><label class="section-label">9. Dependencies</label>
                     <table class="widget-table"><tbody id="depsTable"></tbody></table>
                     <button onclick="addDep()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Dependency</button>
                 </div>
+
                 <div class="section-container"><label class="section-label">10. Outcomes</label>
                     <table class="widget-table"><tbody id="outcomesTable"></tbody></table>
                     <button onclick="addOutcome()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Outcome</button>
                 </div>
+
                 <div class="section-container"><label class="section-label">11. References</label>
                     <table class="widget-table"><thead><tr><th>Title</th><th>URL</th><th width="40"></th></tr></thead><tbody id="refsTable"></tbody></table>
                     <button onclick="addReference()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Ref</button>
                 </div>
-                <div class="section-container"><label class="section-label">12. Open Comments (From GitHub)</label>
-                    <table class="widget-table"><thead><tr><th width="100">Link</th><th>Comment Text</th></tr></thead><tbody id="commentsTable"></tbody></table>
-                    <p class="text-[10px] text-slate-400 italic">Comments are fetched automatically from GitHub and cannot be edited here. Link to the comment to edit or respond.</p>
+
+                <div class="section-container">
+                    <label class="section-label">13. Categories</label>
+                    
+                    <div class="mb-6">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Primary Category</label>
+                        <select id="uc_primaryCategory" onchange="state.primaryCategory=this.value; saveToLocal();">
+                            <option value="">-- Select Category --</option>
+                            <option value="All Learning Counts">All Learning Counts</option>
+                            <option value="AI-Empowered Learning">AI-Empowered Learning</option>
+                            <option value="Government & Administrative">Government & Administrative</option>
+                            <option value="Health Care">Health Care</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-6">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tags</label>
+                        <div id="tagsContainer" class="flex flex-wrap gap-1 mb-2"></div>
+                        <div class="flex gap-2">
+                            <input type="text" id="tagInput" placeholder="New Tag Name" class="flex-1">
+                            <button onclick="addTag()" class="bg-slate-700 text-white px-4 py-2 rounded text-[10px] font-black uppercase whitespace-nowrap">Add Tag</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Codes</label>
+                        <table class="widget-table">
+                            <thead>
+                                <tr>
+                                    <th>Code Ref (URL)</th>
+                                    <th>Code Type</th>
+                                    <th>Code Value</th>
+                                    <th>Value Ref (URL)</th>
+                                    <th width="40"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="codesTable"></tbody>
+                        </table>
+                        <button onclick="addCode()" class="text-[11px] font-black text-blue-600 uppercase">+ Add Code</button>
+                    </div>
                 </div>
             </div>
         </main>
@@ -109,8 +145,8 @@
     </div>
 
     <script>
-        const REPO = "INFERable-app/educate_use_cases";
-        let state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [], comments: [] };
+        const REPO = "educoreproject/educore_use_cases";
+        let state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [], primaryCategory: "", tags: [], codes: [] };
         let lastSyncedState = ""; 
         let currentIssueUrl = "new";
 
@@ -133,96 +169,42 @@
         async function fetchIssues() {
             const token = document.getElementById('ghToken').value;
             const [owner, name] = REPO.split('/');
-            const loadingEl = document.getElementById('loading');
-            const warningEl = document.getElementById('hierarchyWarning');
-            const selector = document.getElementById('issueSelector');
-            if (loadingEl) loadingEl.style.display = 'block';
-            if (warningEl) warningEl.style.display = 'none';
-
+            document.getElementById('loading').style.display = 'block';
             try {
-                let issues = [];
-                if (!token) {
-                    if (warningEl) warningEl.style.display = 'inline';
-                    await performRestFallback();
+                const query = `query { repository(owner: "${owner}", name: "${name}") { issues(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { title, url, parent { url } } } } }`;
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `token ${token}`;
+                const res = await fetch('https://api.github.com/graphql', { method: 'POST', headers: headers, body: JSON.stringify({ query }) });
+                const responseData = await res.json();
+                let issues;
+                if (res.ok && responseData.data) {
+                    issues = responseData.data.repository.issues.nodes;
                 } else {
-                    const query = `query {
-                        repository(owner: "${owner}", name: "${name}") {
-                            issues(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) {
-                                nodes { title, url, parent { url } }
-                            }
-                        }
-                    }`;
-                    const res = await fetch('https://api.github.com/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `token ${token}` },
-                        body: JSON.stringify({ query })
-                    });
-                    const responseData = await res.json();
-                    if (res.ok && responseData.data) {
-                        issues = responseData.data.repository.issues.nodes;
-                    } else {
-                        if (warningEl) warningEl.style.display = 'inline';
-                        await performRestFallback();
-                    }
-                }
-
-                async function performRestFallback() {
                     const restHeaders = token ? { 'Authorization': `token ${token}` } : {};
-                    const restRes = await fetch(`https://api.github.com/repos/${owner}/${name}/issues?state=open&per_page=100`, { headers: restHeaders });
-                    if (restRes.ok) {
-                        const restData = await restRes.json();
-                        issues = restData.map(i => ({
-                            title: i.title,
-                            url: i.html_url,
-                            parent: (i.body || "").match(/Parent:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/issues\/\d+)/i) ? { url: RegExp.$1 } : null
-                        }));
-                    }
+                    const restRes = await fetch(`https://api.github.com/repos/${owner}/${name}/issues`, { headers: restHeaders });
+                    if (!restRes.ok) return;
+                    const restIssues = await restRes.json();
+                    issues = restIssues.map(i => ({ title: i.title, url: i.html_url, parent: i.body.match(/Parent:\s*(https:\/\/github\.com\/[^\/]+\/[^\/]+\/issues\/\d+)/) ? { url: RegExp.$1 } : null }));
                 }
-
+                const selector = document.getElementById('issueSelector');
                 selector.innerHTML = '<option value="new">-- Create New Use Case --</option>';
                 const issueMap = new Map();
                 const topLevel = [];
-                const allUrls = new Set(issues.map(i => i.url));
-
                 issues.forEach(issue => {
-                    const parentUrl = issue.parent?.url;
-                    if (!parentUrl || !allUrls.has(parentUrl)) {
-                        topLevel.push(issue);
-                    } else {
-                        if (!issueMap.has(parentUrl)) issueMap.set(parentUrl, []);
-                        issueMap.get(parentUrl).push(issue);
-                    }
+                    if (!issue.parent) topLevel.push(issue);
+                    else { if (!issueMap.has(issue.parent.url)) issueMap.set(issue.parent.url, []); issueMap.get(issue.parent.url).push(issue); }
                 });
-
                 const addHierarchy = (issue, depth = 0) => {
                     const opt = document.createElement('option');
                     opt.value = issue.url;
-                    const prefix = "-".repeat(depth) + (depth > 0 ? " " : "");
-                    opt.textContent = prefix + issue.title.replace('Use Case: ', '').trim();
+                    opt.textContent = "-".repeat(depth) + (depth > 0 ? " " : "") + issue.title.replace('Use Case: ', '').trim();
                     selector.appendChild(opt);
                     (issueMap.get(issue.url) || []).forEach(child => addHierarchy(child, depth + 1));
                 };
-                topLevel.forEach(p => addHierarchy(p, 0));
-                if (currentIssueUrl) selector.value = currentIssueUrl;
-                updateGhLinkUI();
-            } catch(e) { 
-                console.error("Fetch Failed", e); 
-                if (warningEl) warningEl.style.display = 'inline';
-            } finally {
-                if (loadingEl) loadingEl.style.display = 'none';
-            }
-        }
-
-        function updateGhLinkUI() {
-            const container = document.getElementById('ghLinkContainer');
-            const link = document.getElementById('ghIssueLink');
-            if (currentIssueUrl && currentIssueUrl !== 'new') {
-                container.classList.remove('hidden');
-                link.href = currentIssueUrl;
-                link.textContent = currentIssueUrl;
-            } else {
-                container.classList.add('hidden');
-            }
+                topLevel.forEach(parent => addHierarchy(parent, 0));
+                if (currentIssueUrl && currentIssueUrl !== "new") selector.value = currentIssueUrl;
+            } catch(e) { console.error("Fetch Failed", e); }
+            finally { document.getElementById('loading').style.display = 'none'; }
         }
 
         async function handleSelectionChange() {
@@ -233,9 +215,9 @@
                 if (confirm("Unsaved changes detected. Publish now?")) await executePublish(currentIssueUrl !== 'new');
             }
             if (nextVal === 'new') {
-                if(confirm("Start new use case? Clear form?")) { resetForm(); currentIssueUrl = 'new'; saveToLocal(); updateGhLinkUI(); } else { selector.value = currentIssueUrl; }
+                if(confirm("Start new use case? Clear form?")) { resetForm(); currentIssueUrl = 'new'; saveToLocal(); } else selector.value = currentIssueUrl;
             } else {
-                if (confirm(`Fetch this use case from GitHub?`)) { await fetchSpecificIssue(nextVal); currentIssueUrl = nextVal; saveToLocal(); updateGhLinkUI(); } else { selector.value = currentIssueUrl; }
+                if (confirm(`Fetch this use case from GitHub?`)) { await fetchSpecificIssue(nextVal); currentIssueUrl = nextVal; saveToLocal(); } else selector.value = currentIssueUrl;
             }
         }
 
@@ -245,12 +227,6 @@
             try {
                 const res = await fetch(`https://api.github.com/repos/${REPO}/issues/${id}`, { headers: token ? {'Authorization': `token ${token}`} : {} });
                 const data = await res.json();
-                
-                // Fetch Comments
-                const commRes = await fetch(data.comments_url, { headers: token ? {'Authorization': `token ${token}`} : {} });
-                const commData = await commRes.json();
-                state.comments = commData.map(c => ({ url: c.html_url, text: c.body }));
-
                 parseMarkdownToState(data.title, data.body);
                 lastSyncedState = JSON.stringify(state);
                 renderAll();
@@ -260,12 +236,16 @@
             } catch (e) { alert("Fetch failed"); }
         }
 
-        async function handlePublishClick() { await executePublish(currentIssueUrl !== 'new'); await fetchIssues(); }
+        async function handlePublishClick() {
+            await executePublish(currentIssueUrl !== 'new');
+            await fetchIssues(); 
+        }
 
         async function executePublish(isUpdate) {
             const token = document.getElementById('ghToken').value;
             if(!token) return alert("PAT Required");
             const apiUrl = isUpdate ? `https://api.github.com/repos/${REPO}/issues/${currentIssueUrl.split('/').pop()}` : `https://api.github.com/repos/${REPO}/issues`;
+            
             try {
                 const res = await fetch(apiUrl, {
                     method: isUpdate ? 'PATCH' : 'POST',
@@ -278,14 +258,18 @@
                     lastSyncedState = JSON.stringify(state);
                     saveToLocal();
                     document.getElementById('issueSelector').value = currentIssueUrl;
-                    updateGhLinkUI();
-                    alert("Published!");
+                    alert("Published Successfully!");
+                } else if (res.status === 403 || res.status === 404) {
+                    alert("Update Failed: You do not have write access to this use case. \n\nPlease leave a comment on the GitHub issue requesting your changes so the owner can update it.");
+                    window.open(currentIssueUrl, '_blank');
+                } else {
+                    alert("Publish failed with status: " + res.status);
                 }
-            } catch (e) { alert("Publish failed"); }
+            } catch (e) { alert("An error occurred during publish."); }
         }
 
         function resetForm() {
-            state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [], comments: [] };
+            state = { title: "", intro: "", objectives: "", scenario: "", actors: [{name: "User", desc: ""}], steps: [{actorIdx: 0, action: ""}], concepts: [], dataElements: [], deps: [], outcomes: [], references: [], primaryCategory: "", tags: [], codes: [] };
             lastSyncedState = JSON.stringify(state);
             renderAll();
         }
@@ -295,6 +279,8 @@
                 const el = document.getElementById(`uc_${f}`);
                 if(el) state[f] = el.value;
             });
+            const cat = document.getElementById('uc_primaryCategory');
+            if(cat) state.primaryCategory = cat.value;
         }
 
         function saveToLocal() {
@@ -309,8 +295,8 @@
             const sy = localStorage.getItem('educore_v4_sync');
             if(s) {
                 state = JSON.parse(s);
-                state.dataElements = (state.dataElements || []).map(d => ({ ...d, notes: d.notes || "" }));
-                if (!state.comments) state.comments = [];
+                if (!state.tags) state.tags = [];
+                if (!state.codes) state.codes = [];
             }
             if(u) currentIssueUrl = u;
             if(sy) lastSyncedState = sy;
@@ -321,35 +307,36 @@
             const sync = (arr, i, f) => `oninput="state.${arr}[${i}].${f}=this.value; saveToLocal();"`;
             document.getElementById('actorsTable').innerHTML = state.actors.map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" onblur="state.actors[${i}].name=this.value; renderAll(); saveToLocal();"></td><td><input type="text" value="${it.desc}" class="ghost-input" ${sync('actors',i,'desc')}></td><td><button onclick="state.actors.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('stepsTable').innerHTML = state.steps.map((it, i) => `<tr><td style="text-align:center; font-weight:900; color:#94a3b8; font-size:10px;">${i+1}</td><td><select onchange="state.steps[${i}].actorIdx=this.value; saveToLocal();" class="ghost-input">${state.actors.map((a,ai)=>`<option value="${ai}" ${it.actorIdx==ai?'selected':''}>${a.name||'Actor'}</option>`).join('')}</select></td><td><input type="text" value="${it.action}" class="ghost-input" ${sync('steps',i,'action')}></td><td style="display:flex; gap:4px; justify-content:center; padding: 4px;"><button onclick="moveStep(${i}, -1)" class="control-btn" style="color:#3b82f6;">↑</button><button onclick="moveStep(${i}, 1)" class="control-btn" style="color:#3b82f6;">↓</button><button onclick="state.steps.splice(${i},1);renderAll();saveToLocal();" class="control-btn" style="color:#f87171;">×</button></td></tr>`).join('');
-            document.getElementById('dataTable').innerHTML = (state.dataElements || []).map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" ${sync('dataElements',i,'name')}></td><td><input type="text" value="${it.def}" class="ghost-input" ${sync('dataElements',i,'def')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('dataElements',i,'url')}></td><td><textarea class="ghost-textarea" oninput="state.dataElements[${i}].notes=this.value; saveToLocal();">${it.notes || ""}</textarea></td><td><button onclick="state.dataElements.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+            document.getElementById('dataTable').innerHTML = (state.dataElements || []).map((it, i) => `<tr><td><input type="text" value="${it.name}" class="ghost-input" ${sync('dataElements',i,'name')}></td><td><input type="text" value="${it.def}" class="ghost-input" ${sync('dataElements',i,'def')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('dataElements',i,'url')}></td><td><button onclick="state.dataElements.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('refsTable').innerHTML = (state.references || []).map((it, i) => `<tr><td><input type="text" value="${it.title}" class="ghost-input" ${sync('references',i,'title')}></td><td><input type="text" value="${it.url}" class="ghost-input" ${sync('references',i,'url')}></td><td><button onclick="state.references.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('conceptsTable').innerHTML = state.concepts.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.concepts[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.concepts.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('depsTable').innerHTML = state.deps.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.deps[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.deps.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             document.getElementById('outcomesTable').innerHTML = state.outcomes.map((it, i) => `<tr><td><input type="text" value="${it}" class="ghost-input" oninput="state.outcomes[${i}]=this.value; saveToLocal();"></td><td><button onclick="state.outcomes.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
             
-            // Render Comments Table
-            document.getElementById('commentsTable').innerHTML = (state.comments || []).map(c => `<tr><td><a href="${c.url}" target="_blank" class="text-blue-600 underline font-bold">[view]</a></td><td class="text-slate-700">${c.text}</td></tr>`).join('');
-            
+            // Render Categories
+            document.getElementById('uc_primaryCategory').value = state.primaryCategory || "";
+            document.getElementById('tagsContainer').innerHTML = state.tags.map((t, i) => `<span class="tag-pill">${t} <button onclick="state.tags.splice(${i},1);renderAll();saveToLocal();" class="ml-1 text-slate-400">×</button></span>`).join('');
+            document.getElementById('codesTable').innerHTML = state.codes.map((it, i) => `<tr><td><input type="text" value="${it.ref}" class="ghost-input" ${sync('codes',i,'ref')}></td><td><input type="text" value="${it.type}" class="ghost-input" ${sync('codes',i,'type')}></td><td><input type="text" value="${it.val}" class="ghost-input" ${sync('codes',i,'val')}></td><td><input type="text" value="${it.vRef}" class="ghost-input" ${sync('codes',i,'vRef')}></td><td><button onclick="state.codes.splice(${i},1);renderAll();saveToLocal();" style="color:#f87171;">×</button></td></tr>`).join('');
+
             ['title','intro','objectives','scenario'].forEach(f => { const el = document.getElementById(`uc_${f}`); if(el) el.value = state[f] || ""; });
-            updateGhLinkUI();
         }
 
         function moveStep(i, d) { const n = i+d; if(n>=0 && n<state.steps.length) { [state.steps[i], state.steps[n]] = [state.steps[n], state.steps[i]]; renderAll(); saveToLocal(); } }
         function addActor() { state.actors.push({name:"", desc:""}); renderAll(); saveToLocal(); }
         function addStep() { state.steps.push({actorIdx:0, action:""}); renderAll(); saveToLocal(); }
-        function addDataElement() { state.dataElements.push({name:"", def:"", url:"", notes:""}); renderAll(); saveToLocal(); }
+        function addDataElement() { state.dataElements.push({name:"", def:"", url:""}); renderAll(); saveToLocal(); }
         function addReference() { state.references.push({title:"", url:""}); renderAll(); saveToLocal(); }
         function addConcept() { state.concepts.push(""); renderAll(); saveToLocal(); }
         function addDep() { state.deps.push(""); renderAll(); saveToLocal(); }
         function addOutcome() { state.outcomes.push(""); renderAll(); saveToLocal(); }
+        function addTag() { const inp = document.getElementById('tagInput'); if(inp.value.trim()){ state.tags.push(inp.value.trim()); inp.value=''; renderAll(); saveToLocal(); } }
+        function addCode() { state.codes.push({ref:"", type:"", val:"", vRef:""}); renderAll(); saveToLocal(); }
 
         function generateMarkdown() {
             const s = state;
             const swim = `### **6. Interaction Swimlane**\n\n<table class="swimlane-table"><thead><tr><th>#</th>${s.actors.map(a=>`<th>${a.name}</th>`).join('')}</tr></thead><tbody>` + s.steps.map((st, i) => `<tr><td>${i+1}</td>${s.actors.map((_, ai) => `<td>${ai == st.actorIdx ? st.action : ""}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
-            const dataMd = `### **8. Data**\n| Name | Def | URL | Notes |\n| :--- | :--- | :--- | :--- |\n` + s.dataElements.map(d=>`| ${d.name} | ${d.def} | ${d.url} | ${(d.notes || "").replace(/\n/g, '<br>')} |`).join('\n');
-            const commMd = `### **12. Open Comments**\n| Comment Link | Comment Text |\n| :--- | :--- |\n` + s.comments.map(c=>`| [view](${c.url}) | ${c.text.replace(/\n/g, ' ')} |`).join('\n');
-
-            return [ `## **Use Case: ${s.title}**`, `### **1. Introduction**\n${s.intro}`, `### **2. Objectives**\n${s.objectives}`, `### **3. Scenario**\n${s.scenario}`, `### **4. Actors**\n| Actor | Role |\n| :--- | :--- |\n${s.actors.map(a=>`| **${a.name}** | ${a.desc} |`).join('\n')}`, `### **5. Steps**\n| # | Actor | Action |\n| :--- | :--- | :--- |\n${s.steps.map((st, i)=>`| ${i+1} | ${s.actors[st.actorIdx]?.name} | ${st.action} |`).join('\n')}`, swim, `### **7. Key Concepts**\n${s.concepts.map(c=>`* ${c}`).join('\n')}`, dataMd, `### **9. Dependencies**\n${s.deps.map(d=>`* ${d}`).join('\n')}`, `### **10. Outcomes**\n${s.outcomes.map(o=>`* ${o}`).join('\n')}`, `### **11. References**\n${s.references.map(r=>`* [${r.title}](${r.url})`).join('\n')}`, commMd ].join('\n\n---\n\n');
+            const catMd = `### **13. Categories**\n**Primary Category:** ${s.primaryCategory || "None"}\n\n**Tags:** ${s.tags.join(', ') || "None"}\n\n| Code Ref | Code Type | Code Value | Code Value Ref |\n| :--- | :--- | :--- | :--- |\n${s.codes.map(c=>`| ${c.ref} | ${c.type} | ${c.val} | ${c.vRef} |`).join('\n')}`;
+            return [ `## **Use Case: ${s.title}**`, `### **1. Introduction**\n${s.intro}`, `### **2. Objectives**\n${s.objectives}`, `### **3. Scenario**\n${s.scenario}`, `### **4. Actors**\n| Actor | Role |\n| :--- | :--- |\n${s.actors.map(a=>`| **${a.name}** | ${a.desc} |`).join('\n')}`, `### **5. Steps**\n| # | Actor | Action |\n| :--- | :--- | :--- |\n${s.steps.map((st, i)=>`| ${i+1} | ${s.actors[st.actorIdx]?.name} | ${st.action} |`).join('\n')}`, swim, `### **7. Key Concepts**\n${s.concepts.map(c=>`* ${c}`).join('\n')}`, `### **8. Data**\n| Name | Def | URL |\n| :--- | :--- | :--- |\n${s.dataElements.map(d=>`| ${d.name} | ${d.def} | ${d.url} |`).join('\n')}`, `### **9. Dependencies**\n${s.deps.map(d=>`* ${d}`).join('\n')}`, `### **10. Outcomes**\n${s.outcomes.map(o=>`* ${o}`).join('\n')}`, `### **11. References**\n${s.references.map(r=>`* [${r.title}](${r.url})`).join('\n')}`, catMd ].join('\n\n---\n\n');
         }
 
         function parseMarkdownToState(title, body) {
@@ -358,10 +345,10 @@
             const find = (n) => parts.find(p => p.includes(`### **${n}.`)) || "";
             const clean = (t) => t.replace(/### \*\*\d+\. .*?\*\*/, "").trim();
             state.intro = clean(find(1)); state.objectives = clean(find(2)); state.scenario = clean(find(3));
-            const pTable = (c) => c.split('\n').filter(r => r.includes('|') && !r.includes(':---') && !r.includes('| Actor |') && !r.includes('| # |') && !r.includes('| Name |') && !r.includes('| Comment Link |')).map(r => r.split('|').map(x=>x.trim()).filter(x=>x!==""));
+            const pTable = (c) => c.split('\n').filter(r => r.includes('|') && !r.includes(':---') && !r.includes('| Actor |') && !r.includes('| # |') && !r.includes('| Name |') && !r.includes('| Code Ref |')).map(r => r.split('|').map(x=>x.trim()).filter(x=>x!==""));
             const aRows = pTable(find(4)); state.actors = aRows.map(r => ({name: r[0].replace(/\*\*/g,""), desc: r[1]}));
             const sRows = pTable(find(5)); state.steps = sRows.map(r => ({actorIdx: Math.max(0, state.actors.findIndex(a=>a.name===r[1])), action: r[2]}));
-            const dRows = pTable(find(8)); state.dataElements = dRows.map(r => ({ name: r[0] || "", def: r[1] || "", url: r[2] || "", notes: (r[3] || "").replace(/<br>/g, '\n') }));
+            const dRows = pTable(find(8)); state.dataElements = dRows.map(r => ({name: r[0], def: r[1], url: r[2]}));
             const refSection = clean(find(11));
             state.references = refSection.split('\n').filter(line => line.startsWith('* ')).map(line => {
                 const match = line.match(/\* \[([^\]]+)\]\(([^)]+)\)/);
@@ -371,7 +358,18 @@
             state.concepts = parseList(clean(find(7)));
             state.deps = parseList(clean(find(9)));
             state.outcomes = parseList(clean(find(10)));
-            // Comments are handled separately via API fetch in fetchSpecificIssue
+            
+            // Section 13 backward compatibility
+            const catPart = find(13);
+            if (catPart) {
+                state.primaryCategory = catPart.match(/\*\*Primary Category:\*\* (.*)/)?.[1] || "";
+                const tagsRaw = catPart.match(/\*\*Tags:\*\* (.*)/)?.[1] || "";
+                state.tags = (tagsRaw === "None" || !tagsRaw) ? [] : tagsRaw.split(',').map(t => t.trim());
+                const cRows = pTable(catPart);
+                state.codes = cRows.map(r => ({ ref: r[0], type: r[1], val: r[2], vRef: r[3] }));
+            } else {
+                state.primaryCategory = ""; state.tags = []; state.codes = [];
+            }
         }
 
         function switchTab(t) {
