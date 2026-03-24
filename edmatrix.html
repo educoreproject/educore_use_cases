@@ -137,7 +137,7 @@ createApp({
     setup() {
         const viewMode = ref("dataCategory"); // 'dataCategory' or 'useCase'
         const types = ["Organizational", "Personal", "Event", "Achievement", "Credential", "Competency", "Content Metadata", "Content", "AI"];
-        const useCaseCategories = ["AI-empowered Learning", "All Learning Matters"];
+        const useCaseCategories = ["AI-empowered Learning", "All Learning Counts"];
         
         const layerNames = ["Data Dictionary", "Logical Model", "Serialization", "Protocol"];
         const layerMap = { 1: "Data Dictionary", 2: "Logical Model", 3: "Serialization", 4: "Protocol" };
@@ -187,8 +187,8 @@ createApp({
             const useCases = [];
             // Logic: types with AI go to "AI-empowered Learning"
             if (s.types.includes("AI")) useCases.push("AI-empowered Learning");
-            // Logic: types with Achievement OR Credential go to "All Learning Count"
-            if (s.types.includes("Achievement") || s.types.includes("Credential")) useCases.push("All Learning Count");
+            // Logic: types with Achievement OR Credential go to "All Learning Counts"
+            if (s.types.includes("Achievement") || s.types.includes("Credential")) useCases.push("All Learning Counts");
 
             return {
                 ...s,
