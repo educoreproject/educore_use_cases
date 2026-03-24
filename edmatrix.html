@@ -25,6 +25,14 @@
         .standard-card:hover { border-left: 4px solid var(--bright-teal); transform: translateX(4px); }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1em;
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -49,10 +57,17 @@
 
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-10">
         <div class="xl:col-span-8 bg-white p-8 rounded-2xl shadow-xl shadow-blue-900/5 border border-gray-100 overflow-x-auto">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xs uppercase tracking-widest font-bold text-gray-400">Standards Intersection Matrix</h2>
-                <div v-if="activeFilter.type" class="text-xs font-bold text-orange-500 animate-pulse">
-                    Filtering: {{activeFilter.type}}
+            
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">View Matrix By:</label>
+                    <select v-model="viewMode" @change="resetFilter" class="bg-gray-50 border border-gray-200 text-sm font-semibold py-2 px-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-infrastructure">
+                        <option value="dataCategory">Data Category</option>
+                        <option value="useCase">Use Case Category</option>
+                    </select>
+                </div>
+                <div v-if="activeFilter.type" class="text-xs font-bold text-orange-500 bg-orange-50 px-3 py-1 rounded-full border border-orange-100">
+                    Active: {{activeFilter.type}}
                 </div>
             </div>
             
@@ -61,18 +76,18 @@
                     <text :x="220 + (index * 155)" y="25" font-size="12" font-weight="700" text-anchor="middle" fill="rgb(7, 42, 108)">{{ layer }}</text>
                 </g>
 
-                <g v-for="(type, index) in types" :key="type">
-                    <text x="0" :y="72 + (index * 52)" font-size="13" font-weight="600" fill="rgb(7, 42, 108)">{{ type }}</text>
+                <g v-for="(rowLabel, index) in currentRows" :key="rowLabel">
+                    <text x="0" :y="72 + (index * 52)" font-size="12" font-weight="600" fill="rgb(7, 42, 108)">{{ rowLabel }}</text>
                     
-                    <rect v-for="(layer, lIdx) in layerNames" :key="type+layer"
+                    <rect v-for="(layer, lIdx) in layerNames" :key="rowLabel+layer"
                         :x="145 + (lIdx * 155)" :y="50 + (index * 52)" 
                         width="150" height="40" rx="6"
-                        :class="['matrix-cell', getCellClass(type, layer)]"
-                        @click="toggleFilter(type, layer)" />
+                        :class="['matrix-cell', getCellClass(rowLabel, layer)]"
+                        @click="toggleFilter(rowLabel, layer)" />
                     
-                    <circle v-for="(layer, lIdx) in layerNames" v-if="countMatches(type, layer) > 0"
+                    <circle v-for="(layer, lIdx) in layerNames" v-if="countMatches(rowLabel, layer) > 0"
                         :cx="220 + (lIdx * 155)" :cy="70 + (index * 52)" r="4" 
-                        :fill="activeFilter.type === type && activeFilter.layer === layer ? 'white' : 'rgb(0, 181, 184)'"
+                        :fill="activeFilter.type === rowLabel && activeFilter.layer === layer ? 'white' : 'rgb(0, 181, 184)'"
                         class="pointer-events-none" />
                 </g>
             </svg>
@@ -102,6 +117,7 @@
                     <div class="text-sm text-gray-600 leading-relaxed mb-4 prose-sm" v-html="std.excerpt"></div>
                     <div class="flex flex-wrap gap-2 mb-3">
                         <span v-for="t in std.types" class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-blue-50 text-blue-600">{{ t }}</span>
+                        <span v-for="uc in std.useCaseCategories" class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-purple-50 text-purple-600 italic"># {{ uc }}</span>
                     </div>
                     <div class="flex justify-between items-center text-[10px] font-bold border-t pt-3">
                         <span style="color: var(--bright-teal)">{{ std.uses.filter(u => u !== "").join(', ') || 'N/A' }}</span>
@@ -119,61 +135,82 @@ const { createApp, ref, computed } = Vue;
 
 createApp({
     setup() {
+        const viewMode = ref("dataCategory"); // 'dataCategory' or 'useCase'
         const types = ["Organizational", "Personal", "Event", "Achievement", "Credential", "Competency", "Content Metadata", "Content", "AI"];
+        const useCaseCategories = ["AI-empowered Learning", "All Learning Matters"];
+        
         const layerNames = ["Data Dictionary", "Logical Model", "Serialization", "Protocol"];
         const layerMap = { 1: "Data Dictionary", 2: "Logical Model", 3: "Serialization", 4: "Protocol" };
         
         const activeFilter = ref({ type: null, layer: null });
 
         const rawData = [
-            { name: "CASE", org: "1EdTech", types: ["Competency"], dataLayers: [1,2,3,4], uses: ["JSON-LD"], url: "https://www.imsglobal.org/activity/case", excerpt: "<p><strong>Competencies &amp; Academic Standards Exchange:</strong> A standard format for representing competency frameworks such as state standards, learning objectives, etc.</p>" },
-            { name: "CC", org: "1EdTech", types: ["Content Metadata","Content"], dataLayers: [2,3], uses: ["XML","Zip"], url: "http://www.imsglobal.org/cc/", excerpt: "<p><strong>Common Cartridge:</strong> A content packaging standard for course materials.</p>" },
-            { name: "CP", org: "1EdTech", types: ["Content Metadata","Content"], dataLayers: [2,3], uses: ["XML","Zip"], url: "https://www.imsglobal.org/content/packaging/index.html", excerpt: "<p><strong>Content Packaging:</strong> A format for packaging content and associated metadata for exchange between educational systems.</p>" },
-            { name: "Caliper", org: "1EdTech", types: ["Event"], dataLayers: [4], uses: ["HTTP"], url: "https://www.imsglobal.org/activity/caliper", excerpt: "<p><strong>Caliper Analytics:</strong> A protocol for transmitting and collecting learning events for later analysis.</p>" },
-            { name: "LTI", org: "1EdTech", types: ["Content"], dataLayers: [4], uses: ["OAuth"], url: "http://www.imsglobal.org/activity/learning-tools-interoperability", excerpt: "<p><strong>Learning Tools Interoperability:</strong> A protocol that enables a learning management system to incorporate custom learning tools or experiences offered by another system.</p>" },
-            { name: "Open Badges", org: "1EdTech", types: ["Achievement","Credential"], dataLayers: [3,4], uses: ["JSON-LD"], url: "https://www.imsglobal.org/sites/default/files/Badges/OBv2p0Final/index.html", excerpt: "<p><strong>Open Badge Infrastructure:</strong> A format for communicating skills and achievements.</p>" },
-            { name: "OneRoster", org: "1EdTech", types: ["Organizational","Personal"], dataLayers: [3,4], uses: ["REST","CSV"], url: "https://www.imsglobal.org/activity/onerosterlis", excerpt: "<p><strong>OneRoster:</strong> A protocol and format for secure exchange of class roster information between applications.</p>" },
-            { name: "QTI", org: "1EdTech", types: ["Content Metadata","Content"], dataLayers: [1,2,3], uses: ["XML","LOM"], url: "http://www.imsglobal.org/question/", excerpt: "<p><strong>Question and Test Interoperability:</strong> A content packaging format for questions (assessment items) and tests.</p>" },
-            { name: "CLR", org: "1EdTech", types: ["Personal","Achievement","Credential"], dataLayers: [1,2,3], uses: ["JSON"], url: "http://www.imsglobal.org/clr/", excerpt: "<p><strong>Comprehensive Learner Record:</strong> A standard for digital records of learning and achievements.</p>" },
-            { name: "MCP", org: "Agentic AI Foundation", types: ["AI", "Content Metadata","Content"], dataLayers: [4], uses: ["JSON","REST"], url: "https://modelcontextprotocol.io/", excerpt: "<p><strong>Model Context Protocol (MCP):</strong> An open standard that enables AI models to securely connect to external tools and data sources.</p>" },
-            { name: "A2A", org: "Linux Foundation", types: ["AI"], dataLayers: [4], uses: ["JSON","REST"], url: "https://www.linuxfoundation.org", excerpt: "<p><strong>Agent to Agent Protocol (A2A):</strong> Empowers developers to build agents that interoperate regardless of platform or framework.</p>" },
-            { name: "SIF Data Model", org: "A4L", types: ["Organizational","Personal","Event","Achievement"], dataLayers: [1,2,3], uses: ["LRMI"], url: "https://www.a4l.org/page/DataModel", excerpt: "<p><strong>SIF Data Model:</strong> Data model for representing and transmitting educational information.</p>" },
-            { name: "SIF Infrastructure", org: "A4L", types: ["Organizational","Personal","Event","Achievement"], dataLayers: [4], uses: ["XML","JSON","HTTP"], url: "https://www.a4l.org/page/Infrastructure", excerpt: "<p><strong>SIF Infrastructure:</strong> Protocol for transmitting educational information.</p>" },
-            { name: "Blockcerts", org: "Blockcerts", types: ["Personal","Event","Achievement","Credential"], dataLayers: [3,4], uses: ["Blockchain","JSON-LD"], url: "https://www.blockcerts.org/", excerpt: "<p><strong>Blockcerts</strong> is an open standard for creating blockchain-based certificates.</p>" },
-            { name: "UDL", org: "CAST", types: ["Content"], dataLayers: [1,2], uses: [""], url: "http://www.cast.org/our-work/about-udl.html", excerpt: "<p><strong>Universal Design for Learning:</strong> A framework based on learning science.</p>" },
-            { name: "CTDL", org: "Credential Engine", types: ["Credential","Competency","Content Metadata"], dataLayers: [1,2,3], uses: ["JSON-LD"], url: "https://credentialengine.org/", excerpt: "<p><strong>Credential Transparency Description Language:</strong> Rich description of credential-related resources.</p>" },
-            { name: "LRMI", org: "DCMI", types: ["Content Metadata"], dataLayers: [1,2], uses: ["Schema.org"], url: "http://dublincore.org/specifications/lrmi/", excerpt: "<p><strong>Learning Resource Metadata Initiative:</strong> Metadata for describing learning resources.</p>" },
-            { name: "Europass Learning Model", org: "EC", types: ["Organizational","Personal","Event","Achievement","Competency"], dataLayers: [2,3], uses: [""], url: "https://github.com/european-commission-europass/EDCI-Data-Model", excerpt: "<p><strong>Europass Learning Model:</strong> Captures non-formal and formal learning results across Europe.</p>" },
-            { name: "Assessment API", org: "Ed-Fi Alliance", types: ["Event"], dataLayers: [3,4], uses: ["REST","JSON"], url: "https://techdocs.ed-fi.org/", excerpt: "<p>Exchange of student assessment results between disparate systems.</p>" },
-            { name: "Core Student API", org: "Ed-Fi Alliance", types: ["Organizational","Personal","Event","Achievement"], dataLayers: [3,4], uses: ["REST","JSON"], url: "https://techdocs.ed-fi.org/", excerpt: "<p>API surface covering core data domains in K-12 education.</p>" },
-            { name: "Ed-Fi Data Standard", org: "Ed-Fi Alliance", types: ["Organizational","Personal","Event"], dataLayers: [1,2,3], uses: ["JSON"], url: "https://techdocs.ed-fi.org/", excerpt: "<p>Common model providing the data elements for Ed-Fi systems.</p>" },
-            { name: "Enrollment API", org: "Ed-Fi Alliance", types: ["Organizational","Personal"], dataLayers: [3,4], uses: ["REST","JSON"], url: "https://techdocs.ed-fi.org/", excerpt: "<p>Read-only REST APIs for student and teacher demographic data transfer.</p>" },
-            { name: "EduPUB", org: "IDPF", types: ["Content"], dataLayers: [3], uses: ["HTML","EPUB"], url: "http://idpf.org/edupub", excerpt: "<p><strong>EPUB for Education:</strong> Digital book publishing standard targeted at education.</p>" },
-            { name: "IEEE 1484.20.2", org: "IEEE LTSC", types: ["Competency"], dataLayers: [1], uses: [""], url: "https://standards.ieee.org/", excerpt: "Recommended practices for defining interoperable competency data." },
-            { name: "LMT IEEE 2881", org: "IEEE LTSC", types: ["Content Metadata"], dataLayers: [1,2], uses: ["RDF","TTL","JSON-LD"], url: "https://opensource.ieee.org/lmt/lmt", excerpt: "Aligned to a Resource Description Framework (RDF) type model." },
-            { name: "LOM", org: "IEEE LTSC", types: ["Content Metadata"], dataLayers: [1,2,3], uses: ["RDF","XML","JSON-LD"], url: "https://standards.ieee.org/", excerpt: "<p><strong>Learning Object Metadata:</strong> Schema describing learning objects and resources.</p>" },
-            { name: "SCD", org: "IEEE LTSC", types: ["Competency"], dataLayers: [1,2,3], uses: ["RDF","TTL","JSON-LD"], url: "https://opensource.ieee.org/scd/scd", excerpt: "<p><strong>Sharable Competency Definition:</strong> Data model including Rubrics and Criterion.</p>" },
-            { name: "SCORM", org: "IEEE LTSC", types: ["Content"], dataLayers: [2,3], uses: ["HTML","JavaScript"], url: "https://standards.ieee.org/", excerpt: "<p>The classic format for reusable digital learning resources.</p>" },
-            { name: "IEEE xAPI", org: "IEEE LTSC", types: ["Event"], dataLayers: [4], uses: [""], url: "https://opensource.ieee.org/xapi", excerpt: "<p><strong>Experience API:</strong> Tracking activities and student experiences.</p>" },
-            { name: "Activity Report", org: "MedBiquitous", types: ["Organizational","Personal","Event"], dataLayers: [1,2,3], uses: [""], url: "https://www.medbiq.org/", excerpt: "<p>Compile continuing education and certificate data across providers.</p>" },
-            { name: "Performance Framework", org: "MedBiquitous", types: ["Organizational","Credential","Competency"], dataLayers: [1,2,3], uses: [""], url: "https://www.medbiq.org/", excerpt: "<p>Standard format to represent expected performance levels.</p>" },
-            { name: "Admissions Application", org: "PESC", types: ["Organizational","Personal","Event","Achievement","Credential"], dataLayers: [1,2,3], uses: ["XML"], url: "https://www.pesc.org/", excerpt: "<p>PESC Approved Standard for postsecondary admissions applications.</p>" },
-            { name: "College Transcript", org: "PESC", types: ["Organizational","Personal","Event","Achievement","Credential"], dataLayers: [1,2,3], uses: ["XML"], url: "https://www.pesc.org/", excerpt: "<p>Developed for postsecondary institutions to send historical records.</p>" },
-            { name: "EOC", org: "Schema.org", types: ["Organizational","Personal","Credential"], dataLayers: [1,2], uses: [""], url: "https://schema.org/EducationalOccupationalCredential", excerpt: "<p><strong>Schema.org EOC:</strong> A diploma, degree, or qualification badge.</p>" },
-            { name: "CEDS", org: "US Ed", types: ["Organizational","Personal","Event","Achievement","Credential","Competency","Content Metadata"], dataLayers: [1,2], uses: [""], url: "http://ceds.ed.gov/", excerpt: "<p><strong>Common Education Data Standards:</strong> The vocabulary for US education data.</p>" }
+            { name: "CASE", org: "1EdTech", types: ["Competency"], dataLayers: [1,2,3,4], uses: ["JSON-LD"], url: "https://www.imsglobal.org/activity/case", excerpt: "<p><strong>CASE:</strong> Representation of competency frameworks and learning objectives.</p>" },
+            { name: "CC", org: "1EdTech", types: ["Content Metadata","Content"], dataLayers: [2,3], uses: ["XML","Zip"], url: "http://www.imsglobal.org/cc/", excerpt: "<p><strong>Common Cartridge:</strong> Content packaging standard for course materials.</p>" },
+            { name: "CP", org: "1EdTech", types: ["Content Metadata","Content"], dataLayers: [2,3], uses: ["XML","Zip"], url: "https://www.imsglobal.org/content/packaging/index.html", excerpt: "<p><strong>Content Packaging:</strong> Format for exchange between educational systems.</p>" },
+            { name: "Caliper", org: "1EdTech", types: ["Event"], dataLayers: [4], uses: ["HTTP"], url: "https://www.imsglobal.org/activity/caliper", excerpt: "<p><strong>Caliper:</strong> Protocol for transmitting learning events.</p>" },
+            { name: "LTI", org: "1EdTech", types: ["Content"], dataLayers: [4], uses: ["OAuth"], url: "http://www.imsglobal.org/activity/learning-tools-interoperability", excerpt: "<p><strong>LTI:</strong> Protocol for learning management system integration.</p>" },
+            { name: "Open Badges", org: "1EdTech", types: ["Achievement","Credential"], dataLayers: [3,4], uses: ["JSON-LD"], url: "https://www.imsglobal.org/sites/default/files/Badges/OBv2p0Final/index.html", excerpt: "<p><strong>Open Badges:</strong> Format for communicating skills and achievements.</p>" },
+            { name: "OneRoster", org: "1EdTech", types: ["Organizational","Personal"], dataLayers: [3,4], uses: ["REST","CSV"], url: "https://www.imsglobal.org/activity/onerosterlis", excerpt: "<p><strong>OneRoster:</strong> Secure exchange of class roster information.</p>" },
+            { name: "QTI", org: "1EdTech", types: ["Content Metadata","Content"], dataLayers: [1,2,3], uses: ["XML","LOM"], url: "http://www.imsglobal.org/question/", excerpt: "<p><strong>QTI:</strong> Packaging format for assessment items and tests.</p>" },
+            { name: "CLR", org: "1EdTech", types: ["Personal","Achievement","Credential"], dataLayers: [1,2,3], uses: ["JSON"], url: "http://www.imsglobal.org/clr/", excerpt: "<p><strong>CLR:</strong> Digital records of learning and achievements.</p>" },
+            { name: "MCP", org: "Agentic AI Foundation", types: ["AI", "Content Metadata","Content"], dataLayers: [4], uses: ["JSON","REST"], url: "https://modelcontextprotocol.io/", excerpt: "<p><strong>Model Context Protocol (MCP):</strong> Enables AI models to securely connect to external tools.</p>" },
+            { name: "A2A", org: "Linux Foundation", types: ["AI"], dataLayers: [4], uses: ["JSON","REST"], url: "https://www.linuxfoundation.org", excerpt: "<p><strong>Agent to Agent:</strong> Empowers developers to build interoperable agents.</p>" },
+            { name: "SIF Data Model", org: "A4L", types: ["Organizational","Personal","Event","Achievement"], dataLayers: [1,2,3], uses: ["LRMI"], url: "https://www.a4l.org/page/DataModel", excerpt: "<p>Data model for educational information.</p>" },
+            { name: "SIF Infrastructure", org: "A4L", types: ["Organizational","Personal","Event","Achievement"], dataLayers: [4], uses: ["XML","JSON","HTTP"], url: "https://www.a4l.org/page/Infrastructure", excerpt: "<p>Protocol for transmitting educational information.</p>" },
+            { name: "Blockcerts", org: "Blockcerts", types: ["Personal","Event","Achievement","Credential"], dataLayers: [3,4], uses: ["Blockchain","JSON-LD"], url: "https://www.blockcerts.org/", excerpt: "<p><strong>Blockcerts:</strong> Open standard for blockchain-based certificates.</p>" },
+            { name: "UDL", org: "CAST", types: ["Content"], dataLayers: [1,2], uses: [""], url: "http://www.cast.org/our-work/about-udl.html", excerpt: "<p>Framework based on learning science.</p>" },
+            { name: "CTDL", org: "Credential Engine", types: ["Credential","Competency","Content Metadata"], dataLayers: [1,2,3], uses: ["JSON-LD"], url: "https://credentialengine.org/", excerpt: "<p>Description language for credentialing resources.</p>" },
+            { name: "LRMI", org: "DCMI", types: ["Content Metadata"], dataLayers: [1,2], uses: ["Schema.org"], url: "http://dublincore.org/specifications/lrmi/", excerpt: "<p>Metadata terms for describing learning resources.</p>" },
+            { name: "Europass", org: "EC", types: ["Organizational","Personal","Event","Achievement","Competency"], dataLayers: [2,3], uses: [""], url: "https://github.com/european-commission-europass/EDCI-Data-Model", excerpt: "<p>Captures non-formal and formal learning across Europe.</p>" },
+            { name: "Assessment API", org: "Ed-Fi Alliance", types: ["Event"], dataLayers: [3,4], uses: ["REST","JSON"], url: "https://techdocs.ed-fi.org/", excerpt: "<p>Exchange of student assessment results.</p>" },
+            { name: "Core Student API", org: "Ed-Fi Alliance", types: ["Organizational","Personal","Event","Achievement"], dataLayers: [3,4], uses: ["REST","JSON"], url: "https://techdocs.ed-fi.org/", excerpt: "<p>Core data domains in K-12 education.</p>" },
+            { name: "Ed-Fi Data Standard", org: "Ed-Fi Alliance", types: ["Organizational","Personal","Event"], dataLayers: [1,2,3], uses: ["JSON"], url: "https://techdocs.ed-fi.org/", excerpt: "<p>Data elements and serialization for Ed-Fi systems.</p>" },
+            { name: "Enrollment API", org: "Ed-Fi Alliance", types: ["Organizational","Personal"], dataLayers: [3,4], uses: ["REST","JSON"], url: "https://techdocs.ed-fi.org/", excerpt: "<p>APIs for student and teacher demographics.</p>" },
+            { name: "EduPUB", org: "IDPF", types: ["Content"], dataLayers: [3], uses: ["HTML","EPUB"], url: "http://idpf.org/edupub", excerpt: "<p>EPUB profile targeted at education.</p>" },
+            { name: "IEEE 1484.20.2", org: "IEEE LTSC", types: ["Competency"], dataLayers: [1], uses: [""], url: "https://standards.ieee.org/", excerpt: "Defining interoperable competency data." },
+            { name: "LMT IEEE 2881", org: "IEEE LTSC", types: ["Content Metadata"], dataLayers: [1,2], uses: ["RDF","TTL","JSON-LD"], url: "https://opensource.ieee.org/lmt/lmt", excerpt: "Aligned to a Resource Description Framework (RDF) model." },
+            { name: "LOM", org: "IEEE LTSC", types: ["Content Metadata"], dataLayers: [1,2,3], uses: ["RDF","XML","JSON-LD"], url: "https://standards.ieee.org/", excerpt: "<p>LOM: Schema for describing learning objects.</p>" },
+            { name: "SCD", org: "IEEE LTSC", types: ["Competency"], dataLayers: [1,2,3], uses: ["RDF","TTL","JSON-LD"], url: "https://opensource.ieee.org/scd/scd", excerpt: "<p>Data model for competency frameworks.</p>" },
+            { name: "SCORM", org: "IEEE LTSC", types: ["Content"], dataLayers: [2,3], uses: ["HTML","JavaScript"], url: "https://standards.ieee.org/", excerpt: "<p>Reusable digital learning resources.</p>" },
+            { name: "IEEE xAPI", org: "IEEE LTSC", types: ["Event"], dataLayers: [4], uses: [""], url: "https://opensource.ieee.org/xapi", excerpt: "<p>Tracking activities and student experiences.</p>" },
+            { name: "Activity Report", org: "MedBiquitous", types: ["Organizational","Personal","Event"], dataLayers: [1,2,3], uses: [""], url: "https://www.medbiq.org/", excerpt: "<p>Compile continuing education and certification data.</p>" },
+            { name: "Performance Framework", org: "MedBiquitous", types: ["Organizational","Credential","Competency"], dataLayers: [1,2,3], uses: [""], url: "https://www.medbiq.org/", excerpt: "<p>Format to represent expected performance levels.</p>" },
+            { name: "Admissions", org: "PESC", types: ["Organizational","Personal","Event","Achievement","Credential"], dataLayers: [1,2,3], uses: ["XML"], url: "https://www.pesc.org/", excerpt: "<p>Standard for postsecondary admissions applications.</p>" },
+            { name: "College Transcript", org: "PESC", types: ["Organizational","Personal","Event","Achievement","Credential"], dataLayers: [1,2,3], uses: ["XML"], url: "https://www.pesc.org/", excerpt: "<p>Standard for postsecondary educational institutions.</p>" },
+            { name: "EOC", org: "Schema.org", types: ["Organizational","Personal","Credential"], dataLayers: [1,2], uses: [""], url: "https://schema.org/EducationalOccupationalCredential", excerpt: "<p>Diploma, degree, or qualification badge.</p>" },
+            { name: "CEDS", org: "US Ed", types: ["Organizational","Personal","Event","Achievement","Credential","Competency","Content Metadata"], dataLayers: [1,2], uses: [""], url: "http://ceds.ed.gov/", excerpt: "<p>Common vocabulary for US education data.</p>" }
         ];
 
-        const standards = ref(rawData.map(s => ({
-            ...s,
-            layers: s.dataLayers.map(num => layerMap[num])
-        })));
+        // Hydrate data with human-readable layer names AND dynamic useCase mapping
+        const standards = ref(rawData.map(s => {
+            const useCases = [];
+            // Logic: types with AI go to "AI-empowered Learning"
+            if (s.types.includes("AI")) useCases.push("AI-empowered Learning");
+            // Logic: types with Achievement OR Credential go to "All Learning Count"
+            if (s.types.includes("Achievement") || s.types.includes("Credential")) useCases.push("All Learning Count");
+
+            return {
+                ...s,
+                layers: s.dataLayers.map(num => layerMap[num]),
+                useCaseCategories: useCases
+            };
+        }));
+
+        const currentRows = computed(() => {
+            return viewMode.value === 'dataCategory' ? types : useCaseCategories;
+        });
 
         const filteredStandards = computed(() => {
             if (!activeFilter.value.type) return standards.value;
-            return standards.value.filter(s => 
-                s.types.includes(activeFilter.value.type) && 
-                s.layers.includes(activeFilter.value.layer)
-            );
+            
+            return standards.value.filter(s => {
+                const typeMatch = viewMode.value === 'dataCategory' 
+                    ? s.types.includes(activeFilter.value.type)
+                    : s.useCaseCategories.includes(activeFilter.value.type);
+                
+                return typeMatch && s.layers.includes(activeFilter.value.layer);
+            });
         });
 
         const toggleFilter = (type, layer) => {
@@ -185,13 +222,22 @@ createApp({
         };
 
         const resetFilter = () => activeFilter.value = { type: null, layer: null };
-        const countMatches = (type, layer) => standards.value.filter(s => s.types.includes(type) && s.layers.includes(layer)).length;
-        const getCellClass = (type, layer) => {
-            if (activeFilter.value.type === type && activeFilter.value.layer === layer) return 'active-cell';
-            return countMatches(type, layer) > 0 ? 'has-data' : 'empty-cell';
+
+        const countMatches = (rowLabel, layer) => {
+            return standards.value.filter(s => {
+                const typeMatch = viewMode.value === 'dataCategory' 
+                    ? s.types.includes(rowLabel)
+                    : s.useCaseCategories.includes(rowLabel);
+                return typeMatch && s.layers.includes(layer);
+            }).length;
         };
 
-        return { types, layerNames, activeFilter, filteredStandards, toggleFilter, resetFilter, countMatches, getCellClass };
+        const getCellClass = (rowLabel, layer) => {
+            if (activeFilter.value.type === rowLabel && activeFilter.value.layer === layer) return 'active-cell';
+            return countMatches(rowLabel, layer) > 0 ? 'has-data' : 'empty-cell';
+        };
+
+        return { viewMode, types, useCaseCategories, currentRows, layerNames, activeFilter, filteredStandards, toggleFilter, resetFilter, countMatches, getCellClass };
     }
 }).mount('#app');
 </script>
