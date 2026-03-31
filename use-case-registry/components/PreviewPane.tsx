@@ -11,6 +11,239 @@ interface Props {
   state: UseCaseState;
 }
 
+// ── RDF Graph Visualization ─────────────────────────────────────────────────
+function RDFGraphView({ state }: { state: UseCaseState }) {
+  const W = 960, H = 580;
+  const cx = W / 2, cy = H / 2 + 10;
+
+  type NodeKind = "usecase" | "topic" | "actor" | "step" | "story" | "data" | "std";
+
+  const PALETTE: Record<NodeKind, { bg: string; border: string; text: string; dim: string; label: string }> = {
+    usecase: { bg: "#1e293b", border: "#64748b", text: "#f8fafc", dim: "#94a3b8", label: "Use Case" },
+    topic:   { bg: "#0f766e", border: "#2dd4bf", text: "#f0fdfa", dim: "#99f6e4", label: "Topic" },
+    actor:   { bg: "#1d4ed8", border: "#60a5fa", text: "#eff6ff", dim: "#93c5fd", label: "Actor" },
+    step:    { bg: "#6d28d9", border: "#a78bfa", text: "#f5f3ff", dim: "#c4b5fd", label: "Step" },
+    story:   { bg: "#166534", border: "#4ade80", text: "#f0fdf4", dim: "#86efac", label: "User Story" },
+    data:    { bg: "#92400e", border: "#fbbf24", text: "#fffbeb", dim: "#fde68a", label: "Data Element" },
+    std:     { bg: "#9f1239", border: "#fb7185", text: "#fff1f2", dim: "#fda4af", label: "Standard" },
+  };
+
+  interface GNode { id: string; label: string; kind: NodeKind; x: number; y: number; sub?: string; }
+  interface GEdge { from: string; to: string; pred: string; }
+
+  const nodes: GNode[] = [];
+  const edges: GEdge[] = [];
+  const nodeMap: Record<string, GNode> = {};
+
+  function add(n: GNode) { nodes.push(n); nodeMap[n.id] = n; }
+
+  // Fan helper: evenly distribute `count` nodes around `angleDeg` at radius `r`
+  function fan(angleDeg: number, count: number, r: number): { x: number; y: number }[] {
+    if (count === 0) return [];
+    const spread = count === 1 ? 0 : Math.min(60, (count - 1) * 24);
+    return Array.from({ length: count }, (_, i) => {
+      const deg = count === 1 ? angleDeg : angleDeg - spread / 2 + (spread / (count - 1)) * i;
+      const rad = (deg * Math.PI) / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    });
+  }
+
+  // Border-point of a rect (cx,cy,w,h) in the direction of (tx,ty)
+  function borderPt(fx: number, fy: number, tx: number, ty: number, w: number, h: number): [number, number] {
+    const dx = tx - fx, dy = ty - fy;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return [fx, fy];
+    const nx = dx / len, ny = dy / len;
+    const tX = (w / 2) / (Math.abs(nx) || 1e-9);
+    const tY = (h / 2) / (Math.abs(ny) || 1e-9);
+    const t = Math.min(tX, tY);
+    return [fx + nx * t, fy + ny * t];
+  }
+
+  const R = 230;
+  const UC_W = 148, UC_H = 52;
+  const N_W = 120, N_H = 44;
+
+  function nodeSize(kind: NodeKind) { return kind === "usecase" ? [UC_W, UC_H] : [N_W, N_H]; }
+  function trunc(s: string, max: number) { return s && s.length > max ? s.slice(0, max) + "…" : (s || ""); }
+
+  // Center node
+  add({ id: "uc", label: state.title || "Use Case", kind: "usecase", x: cx, y: cy, sub: "uc:UseCase" });
+
+  // Topic — top (-90°)
+  if (state.topic) {
+    const [p] = fan(-90, 1, R);
+    add({ id: "topic", label: state.topic, kind: "topic", x: p.x, y: p.y, sub: "uc:Topic" });
+    edges.push({ from: "uc", to: "topic", pred: "uc:topic" });
+  }
+
+  // Actors — upper-right (-30°)
+  const actors = state.actors.filter(a => a.name);
+  fan(-30, actors.length, R).forEach((p, i) => {
+    const id = `actor-${i}`;
+    add({ id, label: actors[i].name, kind: "actor", x: p.x, y: p.y, sub: "uc:Actor" });
+    edges.push({ from: "uc", to: id, pred: "uc:hasActor" });
+  });
+
+  // Steps — lower-right (30°)
+  const steps = state.steps.filter(s => s.action);
+  fan(30, steps.length, R).forEach((p, i) => {
+    const id = `step-${i}`;
+    add({ id, label: `Step ${i + 1}`, kind: "step", x: p.x, y: p.y, sub: trunc(steps[i].action, 22) });
+    edges.push({ from: "uc", to: id, pred: "uc:hasStep" });
+  });
+
+  // User Stories — bottom (90°)
+  fan(90, state.userStories.length, R).forEach((p, i) => {
+    const us = state.userStories[i];
+    const id = `story-${i}`;
+    add({ id, label: us.id || `Story ${i + 1}`, kind: "story", x: p.x, y: p.y, sub: trunc(us.actor, 18) });
+    edges.push({ from: "uc", to: id, pred: "uc:hasUserStory" });
+  });
+
+  // Data Elements — lower-left (150°)
+  const dataEls = state.dataElements.filter(de => de.name);
+  fan(150, dataEls.length, R).forEach((p, i) => {
+    const id = `data-${i}`;
+    add({ id, label: dataEls[i].name, kind: "data", x: p.x, y: p.y, sub: "uc:DataElement" });
+    edges.push({ from: "uc", to: id, pred: "uc:usedIn" });
+  });
+
+  // Standards — upper-left (-150°), deduplicated
+  const stds = Array.from(new Set(state.standardsMappings.filter(m => m.standard).map(m => m.standard)));
+  fan(-150, stds.length, R).forEach((p, i) => {
+    const id = `std-${i}`;
+    add({ id, label: stds[i], kind: "std", x: p.x, y: p.y, sub: "uc:StandardsMapping" });
+    edges.push({ from: "uc", to: id, pred: "uc:mapsTo" });
+  });
+
+  const hasContent = state.title || state.topic || actors.length > 0 || steps.length > 0 ||
+    state.userStories.length > 0 || dataEls.length > 0 || stds.length > 0;
+
+  if (!hasContent) {
+    return (
+      <div className="mt-8 text-slate-500 text-sm p-8 text-center bg-slate-50 rounded-xl border border-slate-200">
+        Fill in use case details to generate the RDF graph visualization.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8 rounded-xl overflow-hidden border border-slate-700">
+      {/* Header + legend */}
+      <div className="px-4 py-3 bg-slate-900 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-300">RDF Graph</span>
+          <span className="bg-purple-900/60 text-purple-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase border border-purple-700">Visual</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {(Object.entries(PALETTE) as [NodeKind, (typeof PALETTE)[NodeKind]][])
+            .filter(([k]) => k !== "usecase")
+            .map(([kind, p]) => (
+              <div key={kind} className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                  style={{ background: p.bg, border: `1px solid ${p.border}` }} />
+                <span className="text-[10px] text-slate-400">{p.label}</span>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* SVG canvas */}
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        style={{ minHeight: 360, background: "#020617" }}
+        aria-label="RDF graph visualization"
+      >
+        <defs>
+          <marker id="rdf-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,1 L0,6 L6,3.5 z" fill="#475569" />
+          </marker>
+          <pattern id="rdf-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+            <circle cx="16" cy="16" r="0.6" fill="#1e293b" />
+          </pattern>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        <rect width={W} height={H} fill="url(#rdf-grid)" />
+
+        {/* Edges */}
+        {edges.map(e => {
+          const from = nodeMap[e.from], to = nodeMap[e.to];
+          if (!from || !to) return null;
+          const [fw, fh] = nodeSize(from.kind);
+          const [tw, th] = nodeSize(to.kind);
+          const [x1, y1] = borderPt(from.x, from.y, to.x, to.y, fw, fh);
+          const [x2, y2] = borderPt(to.x, to.y, from.x, from.y, tw, th);
+          const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+          return (
+            <g key={`${e.from}-${e.to}`}>
+              <line x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="#334155" strokeWidth={1.5} markerEnd="url(#rdf-arrow)" />
+              <rect x={mx - 38} y={my - 9} width={76} height={14} rx={3}
+                fill="#020617" opacity={0.85} />
+              <text x={mx} y={my + 1.5} textAnchor="middle"
+                fill="#64748b" fontSize={8.5} fontFamily="monospace" fontWeight="600">
+                {e.pred}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Nodes */}
+        {nodes.map(n => {
+          const p = PALETTE[n.kind];
+          const [w, h] = nodeSize(n.kind);
+          const isCenter = n.kind === "usecase";
+          return (
+            <g key={n.id} transform={`translate(${n.x - w / 2},${n.y - h / 2})`}
+              filter={isCenter ? "url(#glow)" : undefined}>
+              {/* Shadow */}
+              <rect width={w} height={h} rx={9} fill="#000" opacity={0.4}
+                transform="translate(2,3)" />
+              {/* Body */}
+              <rect width={w} height={h} rx={9}
+                fill={p.bg} stroke={p.border} strokeWidth={isCenter ? 2 : 1.5} />
+              {/* Top accent stripe */}
+              <rect width={w} height={5} rx={0}
+                fill={p.border} opacity={0.35}
+                style={{ borderRadius: "9px 9px 0 0" }} />
+              {/* Label */}
+              <text
+                x={w / 2}
+                y={n.sub ? (isCenter ? 20 : 18) : h / 2 + 5}
+                textAnchor="middle"
+                fill={p.text}
+                fontSize={isCenter ? 13 : 11}
+                fontWeight="700"
+                fontFamily="system-ui, sans-serif"
+              >
+                {trunc(n.label, isCenter ? 18 : 15)}
+              </text>
+              {n.sub && (
+                <text x={w / 2} y={isCenter ? 34 : 30} textAnchor="middle"
+                  fill={p.dim} fontSize={isCenter ? 9.5 : 9}
+                  fontFamily="monospace" fontWeight="400">
+                  {trunc(n.sub, 20)}
+                </text>
+              )}
+              {/* Dot indicator (non-center nodes) */}
+              {!isCenter && (
+                <circle cx={10} cy={h / 2} r={3.5} fill={p.border} opacity={0.8} />
+              )}
+              <title>{n.label}{n.sub ? ` (${n.sub})` : ""}</title>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 // ── RDF Format toggle ───────────────────────────────────────────────────────
 function RDFView({ state }: { state: UseCaseState }) {
   const [format, setFormat] = useState<"turtle" | "jsonld">("turtle");
@@ -77,6 +310,8 @@ function RDFView({ state }: { state: UseCaseState }) {
       <pre className="bg-slate-900 text-green-300 text-xs p-5 rounded-xl overflow-auto leading-relaxed font-mono max-h-[600px]">
         {content || "# Fill in use case details to generate RDF output."}
       </pre>
+
+      <RDFGraphView state={state} />
     </div>
   );
 }

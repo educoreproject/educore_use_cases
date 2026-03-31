@@ -104,7 +104,7 @@ export default function HomePage() {
         );
       } else {
         // REST fallback
-        const restHeaders = t ? { Authorization: `token ${t}` } : {};
+        const restHeaders: Record<string, string> = t ? { Authorization: `token ${t}` } : {};
         const rr = await fetch(`https://api.github.com/repos/${owner}/${name}/issues`, {
           headers: restHeaders,
         });
@@ -132,7 +132,7 @@ export default function HomePage() {
     const id = url.split("/").pop();
     setLoading(true);
     try {
-      const headers = ghToken ? { Authorization: `token ${ghToken}` } : {};
+      const headers: Record<string, string> = ghToken ? { Authorization: `token ${ghToken}` } : {};
       const res = await fetch(`https://api.github.com/repos/${REPO}/issues/${id}`, { headers });
       const data = await res.json();
       const parsed = parseMarkdownToState(data.title, data.body);
