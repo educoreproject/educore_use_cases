@@ -1,0 +1,4 @@
+use-case-registry/node_modules/
+use-case-registry/.next/
+use-case-registry/out/
+use-case-registry/.env*

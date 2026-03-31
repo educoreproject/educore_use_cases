@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand: #1e3a5f;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  /* Ghost inputs inside tables */
+  .ghost-input {
+    @apply border-none bg-transparent w-full font-medium px-1 py-0.5 text-sm focus:outline-none focus:bg-blue-50 rounded;
+  }
+}
+
+@layer components {
+  .section-card {
+    @apply bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-5;
+  }
+
+  .section-title {
+    @apply text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4;
+  }
+
+  .field-label {
+    @apply block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1;
+  }
+
+  .input-base {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+           placeholder:text-slate-400;
+  }
+
+  .textarea-base {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+           placeholder:text-slate-400 resize-y;
+  }
+
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider
+           px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-ghost {
+    @apply text-blue-600 hover:text-blue-700 text-[11px] font-black uppercase tracking-wider
+           flex items-center gap-1 transition-colors;
+  }
+
+  .btn-danger {
+    @apply text-red-400 hover:text-red-600 transition-colors text-xs;
+  }
+
+  .widget-table {
+    @apply w-full text-sm border-collapse;
+  }
+
+  .widget-table th {
+    @apply bg-slate-50 border border-slate-200 px-2 py-1.5 text-[10px] font-bold
+           uppercase tracking-wider text-slate-500 text-left;
+  }
+
+  .widget-table td {
+    @apply border border-slate-200 px-1 py-0.5 bg-white align-top;
+  }
+
+  .tag-pill {
+    @apply inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200
+           px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  /* Preview markdown styles */
+  .prose-preview h2 { @apply text-2xl font-black text-slate-900 mb-4 mt-8; }
+  .prose-preview h3 { @apply text-base font-bold text-slate-700 mb-3 mt-6 pb-2 border-b border-slate-200; }
+  .prose-preview p  { @apply text-sm text-slate-700 leading-relaxed mb-3; }
+  .prose-preview ul { @apply list-disc pl-5 text-sm text-slate-700 space-y-1 mb-3; }
+  .prose-preview table { @apply w-full text-sm border-collapse mb-4; }
+  .prose-preview th { @apply bg-slate-100 border border-slate-300 px-3 py-2 text-left font-bold text-xs uppercase; }
+  .prose-preview td { @apply border border-slate-300 px-3 py-2 text-xs; }
+  .prose-preview tr:nth-child(even):not(.swimlane-row) td { @apply bg-slate-50; }
+  .prose-preview a  { @apply text-blue-600 underline; }
+  .prose-preview hr { @apply border-slate-200 my-6; }
+  .prose-preview strong { @apply font-semibold; }
+  .prose-preview em { @apply italic text-slate-500; }
+}
