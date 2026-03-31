@@ -164,17 +164,6 @@
                 updateStateFromDOM();
                 saveToLocal();
             });
-
-            // Auto-load issue from ?issue= query param and open in preview
-            const params = new URLSearchParams(window.location.search);
-            const issueParam = params.get('issue');
-            if (issueParam) {
-                const issueUrl = `https://github.com/${REPO}/issues/${issueParam}`;
-                await fetchSpecificIssue(issueUrl);
-                currentIssueUrl = issueUrl;
-                saveToLocal();
-                switchTab('preview');
-            }
         };
 
         async function fetchIssues() {
